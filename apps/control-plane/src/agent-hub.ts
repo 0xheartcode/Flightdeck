@@ -6,12 +6,12 @@ import type { Store } from './store.js';
  * Wire a single authenticated agent socket into the store. The upgrade
  * handler in index.ts has already verified the bearer token before this runs.
  */
-export function handleAgentConnection(ws: WebSocket, store: Store): void {
+export function handleAgentConnection(ws: WebSocket, store: Store, agentName: string): void {
   // Services announced over this connection. Used to remove them when the
   // agent disconnects (a dead host must not linger as a false "running"), and
   // to stop one connection from reporting for services it did not announce.
   const owned = new Set<string>();
-  let label = 'unknown';
+  let label = agentName;
   let connHost: string | undefined;
 
   ws.on('message', (data: unknown) => {
@@ -26,7 +26,7 @@ export function handleAgentConnection(ws: WebSocket, store: Store): void {
     switch (msg.type) {
       case 'hello':
         connHost = msg.hostname;
-        label = `${msg.agentId} @ ${msg.hostname}`;
+        label = `${agentName} (${msg.agentId} @ ${msg.hostname})`;
         console.log(`[agent] connected: ${label}`);
         break;
       case 'service':
