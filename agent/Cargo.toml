@@ -15,7 +15,12 @@ path = "src/main.rs"
 [dependencies]
 tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
 bollard = "0.21"
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
+# "rustls-tls-native-roots" lets the agent connect over wss:// using the OS
+# trust store, without an OpenSSL system dependency.
+tokio-tungstenite = { version = "0.30", default-features = false, features = [
+    "connect",
+    "rustls-tls-native-roots",
+] }
 futures-util = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

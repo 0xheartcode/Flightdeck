@@ -9,7 +9,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.control-plane
     environment:
-      FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:-dev-token}
+      # Required: compose fails fast if unset (no insecure default token).
+      FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:?set FD_AGENT_TOKEN in your .env}
+      FD_DASHBOARD_TOKEN: ${FD_DASHBOARD_TOKEN:-}
+      FD_CORS_ORIGIN: ${FD_CORS_ORIGIN:-http://localhost:8080}
       FD_CONTROL_PLANE_PORT: '4000'
       FD_LOG_BUFFER_SIZE: ${FD_LOG_BUFFER_SIZE:-2000}
     ports:
@@ -42,10 +45,14 @@ services:
       dockerfile: docker/Dockerfile.agent
     environment:
       FD_CONTROL_PLANE_URL: ws://control-plane:4000/agent
-      FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:-dev-token}
+      FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:?set FD_AGENT_TOKEN in your .env}
       HOSTNAME: compose-host
-    # The agent needs the container socket. See docs/security.md; prefer a
-    # rootless Podman socket in production.
+    # The image runs as non-root by default (for a rootless Podman socket the
+    # user owns). This demo mounts the root Docker socket for convenience, so
+    # it overrides to root to read it. Note the socket is root-equivalent and
+    # `:ro` does NOT make the Docker API read-only. Production uses rootless
+    # Podman and keeps the non-root default. See docs/security.md.
+    user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:

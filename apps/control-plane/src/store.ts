@@ -23,7 +23,10 @@ export class Store {
   private readonly serviceListeners = new Map<string, Set<Listener>>();
   private readonly servicesListeners = new Set<ServicesListener>();
 
-  constructor(private readonly bufferSize: number) {}
+  constructor(
+    private readonly bufferSize: number,
+    private readonly maxServices: number = 1000,
+  ) {}
 
   listServices(): ServiceInfo[] {
     return [...this.services.values()].sort((a, b) => a.id.localeCompare(b.id));
@@ -38,6 +41,11 @@ export class Store {
   }
 
   upsertService(service: ServiceInfo): void {
+    // Cap registry growth so a misbehaving agent cannot invent unbounded ids.
+    if (!this.services.has(service.id) && this.services.size >= this.maxServices) {
+      console.warn(`[store] service cap (${this.maxServices}) reached; dropping ${service.id}`);
+      return;
+    }
     this.services.set(service.id, service);
     if (!this.logs.has(service.id)) {
       this.logs.set(service.id, []);
@@ -46,7 +54,11 @@ export class Store {
   }
 
   removeService(id: string): void {
-    if (this.services.delete(id)) {
+    const existed = this.services.delete(id);
+    // Also drop the log buffer so churn (short-lived services) does not leak
+    // memory. Listener sets are cleaned up as subscribers unsubscribe/close.
+    this.logs.delete(id);
+    if (existed) {
       this.emitServices();
     }
   }
@@ -66,7 +78,10 @@ export class Store {
   }
 
   appendLog(log: LogLine): void {
-    const buf = this.logs.get(log.serviceId) ?? [];
+    // Ignore logs for services we have not seen announced; this keeps the log
+    // map bounded by the (capped) service registry rather than by log traffic.
+    const buf = this.logs.get(log.serviceId);
+    if (!buf) return;
     buf.push(log);
     if (buf.length > this.bufferSize) {
       buf.splice(0, buf.length - this.bufferSize);
@@ -86,6 +101,10 @@ export class Store {
     this.serviceListeners.set(serviceId, set);
     return () => {
       set.delete(listener);
+      // Drop the empty set so the listener map stays bounded by active subs.
+      if (set.size === 0) {
+        this.serviceListeners.delete(serviceId);
+      }
     };
   }
 

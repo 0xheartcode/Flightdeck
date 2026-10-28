@@ -7,7 +7,7 @@ import { LogViewer } from '@/components/LogViewer';
 export function App() {
   const { data: services = [], isLoading, isError } = useServices();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { logs, connected } = useLogStream(selectedId);
+  const { logs, connected, stats, status } = useLogStream(selectedId);
 
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
@@ -20,8 +20,9 @@ export function App() {
         </span>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-72 shrink-0 overflow-auto border-r border-slate-800">
+      {/* Stacks on small screens (services on top, logs below), side by side from md up. */}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className="max-h-56 w-full shrink-0 overflow-auto border-b border-slate-800 md:max-h-none md:w-72 md:border-b-0 md:border-r">
           {isLoading ? (
             <p className="p-4 text-sm text-slate-500">Loading services...</p>
           ) : isError ? (
@@ -31,11 +32,11 @@ export function App() {
           )}
         </aside>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-h-0 min-w-0 flex-1">
           {selected ? (
-            <LogViewer logs={logs} connected={connected} />
+            <LogViewer logs={logs} connected={connected} stats={stats} status={status} />
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-slate-600">
+            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-600">
               Select a service to view its logs.
             </div>
           )}

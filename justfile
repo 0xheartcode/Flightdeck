@@ -38,7 +38,12 @@ dev:
     pnpm dev
 
 # Build and run the Rust agent against the local Docker/Podman socket.
+# Sources .env (the control plane loads it itself; the agent needs it exported).
 agent *ARGS:
+    #!/usr/bin/env bash
+    set -a
+    [ -f .env ] && source .env
+    set +a
     cargo run -p flightdeck-agent -- {{ARGS}}
 
 # Auto-fix formatting across both stacks.
