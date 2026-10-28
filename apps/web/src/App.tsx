@@ -7,7 +7,7 @@ import { LogViewer } from '@/components/LogViewer';
 export function App() {
   const { data: services = [], isLoading, isError } = useServices();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { logs, connected } = useLogStream(selectedId);
+  const { logs, connected, stats, status } = useLogStream(selectedId);
 
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
@@ -34,7 +34,7 @@ export function App() {
 
         <main className="min-h-0 min-w-0 flex-1">
           {selected ? (
-            <LogViewer logs={logs} connected={connected} />
+            <LogViewer logs={logs} connected={connected} stats={stats} status={status} />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-600">
               Select a service to view its logs.

@@ -69,6 +69,23 @@ pub struct LogMsg {
     pub log: LogLine,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Stats {
+    pub service_id: String,
+    pub cpu_pct: f64,
+    pub mem_bytes: u64,
+    pub mem_limit_bytes: u64,
+    pub ts: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsMsg {
+    pub v: u8,
+    pub stats: Stats,
+}
+
 /// Internally tagged: each variant serialises to `{ "type": "...", ... }`
 /// with the inner struct's fields merged alongside the tag.
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +96,7 @@ pub enum AgentMessage {
     ServiceGone(ServiceGone),
     Status(StatusMsg),
     Log(LogMsg),
+    Stats(StatsMsg),
 }
 
 impl AgentMessage {
@@ -118,6 +136,13 @@ impl AgentMessage {
         AgentMessage::Log(LogMsg {
             v: PROTOCOL_VERSION,
             log,
+        })
+    }
+
+    pub fn stats(stats: Stats) -> Self {
+        AgentMessage::Stats(StatsMsg {
+            v: PROTOCOL_VERSION,
+            stats,
         })
     }
 }

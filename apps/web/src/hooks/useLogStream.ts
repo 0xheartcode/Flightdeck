@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
-import type { LogLine, ServerMessage } from '@flightdeck/protocol';
+import type { LogLine, ServerMessage, ServiceState, Stats } from '@flightdeck/protocol';
 import { streamUrl } from '@/api';
 
 const MAX_LINES = 2000;
 const RECONNECT_MS = 2000;
 
+export interface LiveStatus {
+  state: ServiceState;
+  exitCode?: number;
+}
+
 export interface LogStream {
   logs: LogLine[];
   connected: boolean;
+  stats: Stats | null;
+  status: LiveStatus | null;
 }
 
 /**
@@ -18,10 +25,14 @@ export interface LogStream {
 export function useLogStream(serviceId: string | null): LogStream {
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [connected, setConnected] = useState(false);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [status, setStatus] = useState<LiveStatus | null>(null);
 
   useEffect(() => {
     setLogs([]);
     setConnected(false);
+    setStats(null);
+    setStatus(null);
     if (!serviceId) {
       return;
     }
@@ -57,6 +68,10 @@ export function useLogStream(serviceId: string | null): LogStream {
             const next = [...prev, msg.log];
             return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
           });
+        } else if (msg.type === 'stats' && msg.stats.serviceId === serviceId) {
+          setStats(msg.stats);
+        } else if (msg.type === 'status' && msg.serviceId === serviceId) {
+          setStatus({ state: msg.state, exitCode: msg.exitCode });
         }
       };
     };
@@ -70,5 +85,5 @@ export function useLogStream(serviceId: string | null): LogStream {
     };
   }, [serviceId]);
 
-  return { logs, connected };
+  return { logs, connected, stats, status };
 }

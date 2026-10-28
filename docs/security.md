@@ -29,11 +29,11 @@ Mitigations, strongest first:
   and the token is compared in constant time.
 - The agent supports `wss://`, so terminate the control plane behind TLS in
   production and point `FD_CONTROL_PLANE_URL` at `wss://...`.
-- The token is a shared secret for now, so any holder can report or remove any
-  service id. Per-agent credentials and per-connection service ownership are a
-  planned hardening; today the control plane does scope cleanup to the
-  connection (a service is removed when the agent that announced it
-  disconnects).
+- The token is a shared secret for now. A connection may only report for
+  services it announced, and only for its own host, so one token holder cannot
+  spoof or clobber another host's services, and a service is removed when the
+  agent that announced it disconnects. Unique per-agent credentials (so a
+  leaked token can be revoked for one agent) remain a planned hardening.
 
 ## Browser to control plane
 

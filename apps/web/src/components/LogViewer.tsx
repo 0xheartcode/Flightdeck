@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
-import type { LogLine } from '@flightdeck/protocol';
-import { cx, formatTime } from '@/lib/format';
+import type { LogLine, Stats } from '@flightdeck/protocol';
+import type { LiveStatus } from '@/hooks/useLogStream';
+import { cx, formatBytes, formatTime } from '@/lib/format';
 
 interface Props {
   logs: LogLine[];
   connected: boolean;
+  stats: Stats | null;
+  status: LiveStatus | null;
 }
 
-export function LogViewer({ logs, connected }: Props) {
+export function LogViewer({ logs, connected, stats, status }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -16,11 +19,24 @@ export function LogViewer({ logs, connected }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
-        <span
-          className={cx('h-2 w-2 rounded-full', connected ? 'bg-emerald-500' : 'bg-rose-500')}
-        />
-        {connected ? 'live' : 'disconnected'}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
+        <span className="flex items-center gap-2">
+          <span
+            className={cx('h-2 w-2 rounded-full', connected ? 'bg-emerald-500' : 'bg-rose-500')}
+          />
+          {connected ? 'live' : 'disconnected'}
+        </span>
+        {stats && (
+          <span className="tabular-nums text-slate-500">
+            CPU {stats.cpuPct.toFixed(1)}% · MEM {formatBytes(stats.memBytes)}
+            {stats.memLimitBytes > 0 ? ` / ${formatBytes(stats.memLimitBytes)}` : ''}
+          </span>
+        )}
+        {status?.state === 'exited' && status.exitCode !== undefined && (
+          <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-300 tabular-nums">
+            exit {status.exitCode}
+          </span>
+        )}
         <span className="ml-auto tabular-nums">{logs.length} lines</span>
       </div>
       <div className="flex-1 overflow-auto bg-[#07090d] p-4 font-mono text-xs leading-relaxed">

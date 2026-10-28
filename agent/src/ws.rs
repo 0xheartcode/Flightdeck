@@ -1,17 +1,20 @@
 //! WebSocket client to the control plane. Maintains a single connection,
-//! sends a `hello` on connect, forwards outgoing messages, and reconnects
-//! with a fixed backoff if the connection drops.
+//! sends a `hello` on connect, forwards outgoing messages, sends periodic
+//! heartbeats, and reconnects with exponential backoff plus jitter.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc::Receiver;
+use tokio::time::interval;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::http::Uri;
 
 use crate::protocol::AgentMessage;
+
+const HEARTBEAT_SECS: u64 = 30;
 
 pub async fn run(
     url: String,
@@ -20,6 +23,7 @@ pub async fn run(
     hostname: String,
     mut rx: Receiver<AgentMessage>,
 ) {
+    let mut attempt: u32 = 0;
     loop {
         let request = match build_request(&url, &token) {
             Ok(request) => request,
@@ -31,12 +35,18 @@ pub async fn run(
         match connect_async(request).await {
             Ok((mut ws, _)) => {
                 tracing::info!("connected to control plane");
+                attempt = 0;
 
                 let hello = AgentMessage::hello(agent_id.clone(), hostname.clone());
                 if send(&mut ws, &hello).await.is_err() {
-                    sleep_backoff().await;
+                    sleep_backoff(attempt).await;
+                    attempt = attempt.saturating_add(1);
                     continue;
                 }
+
+                // App-level heartbeat so half-open TCP connections are noticed
+                // promptly (a failed ping send breaks us out to reconnect).
+                let mut heartbeat = interval(Duration::from_secs(HEARTBEAT_SECS));
 
                 loop {
                     tokio::select! {
@@ -47,6 +57,11 @@ pub async fn run(
                                 }
                             }
                             None => return, // channel closed: agent is shutting down
+                        },
+                        _ = heartbeat.tick() => {
+                            if ws.send(Message::Ping(Vec::new().into())).await.is_err() {
+                                break;
+                            }
                         },
                         incoming = ws.next() => match incoming {
                             Some(Ok(Message::Ping(payload))) => {
@@ -63,10 +78,11 @@ pub async fn run(
                 }
             }
             Err(err) => {
-                tracing::warn!(error = %err, "control plane unreachable; retrying");
+                tracing::warn!(error = %err, attempt, "control plane unreachable; retrying");
             }
         }
-        sleep_backoff().await;
+        sleep_backoff(attempt).await;
+        attempt = attempt.saturating_add(1);
     }
 }
 
@@ -101,6 +117,13 @@ fn build_request(
     Ok(builder)
 }
 
-async fn sleep_backoff() {
-    tokio::time::sleep(Duration::from_secs(3)).await;
+/// Exponential backoff (1,2,4,8,16,32s cap) with sub-second jitter so a fleet
+/// of agents does not reconnect in lockstep against a restarted control plane.
+async fn sleep_backoff(attempt: u32) {
+    let base_secs = (1u64 << attempt.min(5)).min(32);
+    let jitter_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| (d.subsec_nanos() % 1000) as u64)
+        .unwrap_or(0);
+    tokio::time::sleep(Duration::from_millis(base_secs * 1000 + jitter_ms)).await;
 }
