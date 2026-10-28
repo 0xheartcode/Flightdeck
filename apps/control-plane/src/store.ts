@@ -53,11 +53,6 @@ export class Store {
     this.emitServices();
   }
 
-  /** Whether a service id is known (used to drop logs for unknown services). */
-  hasService(id: string): boolean {
-    return this.services.has(id);
-  }
-
   removeService(id: string): void {
     const existed = this.services.delete(id);
     // Also drop the log buffer so churn (short-lived services) does not leak

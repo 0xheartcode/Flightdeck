@@ -3,7 +3,8 @@ import type { Duplex } from 'node:stream';
 import { serve } from '@hono/node-server';
 import { WebSocketServer } from 'ws';
 import { loadConfig } from './config.js';
-import { bearer, tokenOk } from './auth.js';
+import { bearer } from './auth.js';
+import { authorizeUpgrade } from './authorize.js';
 import { Store } from './store.js';
 import { createHttpApp } from './http.js';
 import { handleAgentConnection } from './agent-hub.js';
@@ -30,51 +31,30 @@ const server = serve({ fetch: app.fetch, hostname: config.host, port: config.por
 
 server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
   const { pathname, searchParams } = new URL(req.url ?? '', 'http://localhost');
-  const headerToken = bearer(req.headers.authorization);
 
-  if (pathname === '/agent') {
-    // Agents must use the Authorization header; the token never goes in the URL.
-    if (!tokenOk(config.agentToken, headerToken)) {
-      reject(socket, 401);
-      return;
-    }
-    agentWss.handleUpgrade(req, socket, head, (ws) => agentWss.emit('connection', ws, req));
+  const decision = authorizeUpgrade(
+    {
+      pathname,
+      headerToken: bearer(req.headers.authorization),
+      queryToken: searchParams.get('token') ?? undefined,
+      origin: req.headers.origin,
+    },
+    config,
+  );
+
+  if (!decision.ok) {
+    reject(socket, decision.status);
     return;
   }
 
-  if (pathname === '/stream') {
-    // Reject cross-origin browser connections (WebSockets bypass CORS).
-    if (!originOk(req.headers.origin)) {
-      reject(socket, 403);
-      return;
-    }
-    // Browsers cannot set headers on a WebSocket, so accept ?token= here too.
-    // Gated only when a dashboard token is configured.
-    if (config.dashboardToken) {
-      const presented = headerToken ?? searchParams.get('token') ?? undefined;
-      if (!tokenOk(config.dashboardToken, presented)) {
-        reject(socket, 401);
-        return;
-      }
-    }
-    clientWss.handleUpgrade(req, socket, head, (ws) => clientWss.emit('connection', ws, req));
-    return;
-  }
-
-  reject(socket, 404);
+  const wss = pathname === '/agent' ? agentWss : clientWss;
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
-/** Allow the configured UI origin (or any origin when explicitly set to '*'). */
-function originOk(origin: string | undefined): boolean {
-  if (config.corsOrigin === '*') return true;
-  // No Origin header means a non-browser client (e.g. a CLI); allow it.
-  if (!origin) return true;
-  return origin === config.corsOrigin;
-}
+const REASONS: Record<number, string> = { 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found' };
 
 function reject(socket: Duplex, code: number): void {
-  const reason = code === 401 ? 'Unauthorized' : 'Not Found';
-  socket.write(`HTTP/1.1 ${code} ${reason}\r\n\r\n`);
+  socket.write(`HTTP/1.1 ${code} ${REASONS[code] ?? 'Bad Request'}\r\n\r\n`);
   socket.destroy();
 }
 
