@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Restart action: restart a container from the UI. The control plane routes an
+  allowlisted command to the agent that owns the service and reports the
+  result. Off by default; enable with `FD_ENABLE_ACTIONS=true`.
+
 - Agent now collects and streams CPU and memory usage per container, shown in
   the log view header.
 - Container exit codes are surfaced for stopped services.

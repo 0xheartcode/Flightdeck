@@ -4,9 +4,23 @@
 //! Keep the two in sync: field names are camelCase on the wire, the message
 //! tag is `type`, and every message carries `v` (the protocol version).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u8 = 1;
+
+/// A command sent by the control plane to the agent (control plane -> agent).
+/// Actions are allowlisted on the agent; anything unknown is rejected.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingCommand {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub id: String,
+    pub action: String,
+    #[allow(dead_code)]
+    pub service_id: String,
+    pub container_id: String,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,6 +100,16 @@ pub struct StatsMsg {
     pub stats: Stats,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandResult {
+    pub v: u8,
+    pub id: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 /// Internally tagged: each variant serialises to `{ "type": "...", ... }`
 /// with the inner struct's fields merged alongside the tag.
 #[derive(Debug, Clone, Serialize)]
@@ -97,6 +121,7 @@ pub enum AgentMessage {
     Status(StatusMsg),
     Log(LogMsg),
     Stats(StatsMsg),
+    CommandResult(CommandResult),
 }
 
 impl AgentMessage {
@@ -143,6 +168,15 @@ impl AgentMessage {
         AgentMessage::Stats(StatsMsg {
             v: PROTOCOL_VERSION,
             stats,
+        })
+    }
+
+    pub fn command_result(id: String, ok: bool, error: Option<String>) -> Self {
+        AgentMessage::CommandResult(CommandResult {
+            v: PROTOCOL_VERSION,
+            id,
+            ok,
+            error,
         })
     }
 }
