@@ -85,7 +85,7 @@ just check          # pnpm check (format, lint, typecheck, test, build) + cargo 
 
 ## Security
 
-The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production, authenticate the agent to the control plane with a strong `FD_AGENT_TOKEN`, and keep the agent command-scoped. See [docs/security.md](docs/security.md).
+The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production. Authenticate the agent with a strong `FD_AGENT_TOKEN` (sent as a bearer header, compared in constant time, `wss://` supported). The browser API and log stream are gated by `FD_DASHBOARD_TOKEN` when set, CORS is restricted to `FD_CORS_ORIGIN` (not `*`), and the `/stream` upgrade checks `Origin`. Both WebSocket servers cap frame size and the registry is bounded. See [docs/security.md](docs/security.md) for the full threat model and knobs.
 
 ## Roadmap
 

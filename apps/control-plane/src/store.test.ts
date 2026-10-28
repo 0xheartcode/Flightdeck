@@ -70,4 +70,21 @@ describe('Store', () => {
     store.setStatus('api', 'exited', 137, 1);
     expect(store.getService('api')?.state).toBe('exited');
   });
+
+  it('caps the service registry at maxServices', () => {
+    const store = new Store(10, 2);
+    store.upsertService(service('a'));
+    store.upsertService(service('b'));
+    store.upsertService(service('c')); // dropped: over the cap
+    expect(store.listServices().map((s) => s.id)).toEqual(['a', 'b']);
+    // An update to an existing service still works at the cap.
+    store.setStatus('a', 'exited', 0, 1);
+    expect(store.getService('a')?.state).toBe('exited');
+  });
+
+  it('drops logs for unknown (never-announced) services', () => {
+    const store = new Store(10);
+    store.appendLog(log('ghost', 'should be ignored'));
+    expect(store.recentLogs('ghost')).toEqual([]);
+  });
 });
