@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted deployment control plane for containers on your own servers. Railway-style ergonomics, your hardware.
 
-> **Status:** v0.1.0. The spine works end to end: a Rust agent discovers labelled containers on a host, streams their console logs over WebSocket to the control plane, and a React UI shows services and live logs. Deploy correlation from GitHub Actions, env surfacing, and restart/redeploy are on the roadmap.
+> **Status:** v0.1.0. The spine works end to end: a Rust agent discovers labelled containers on a host, streams their console logs, CPU/memory, and status (including exit codes) over WebSocket to the control plane, and a React UI shows services with live logs and resource usage. Deploy correlation from GitHub Actions, env surfacing, and restart/redeploy are on the roadmap.
 
 ## Why this exists
 
@@ -89,7 +89,7 @@ The agent needs the Docker or Podman socket. On Docker that socket is root-equiv
 
 ## Roadmap
 
-See [docs/architecture.md](docs/architecture.md) for the full picture. Next up: resource stats, restart/redeploy actions, GitHub Actions deploy correlation, and read-only env surfacing.
+See [docs/architecture.md](docs/architecture.md) for the full picture. Next up: restart/redeploy actions, GitHub Actions deploy correlation, and read-only env surfacing.
 
 ## License
 
