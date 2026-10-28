@@ -1,0 +1,10 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Native deps that are allowed to run their install/build scripts.
+# Everything else is blocked by default (pnpm hardening). In pnpm 12 this
+# setting is `allowBuilds` (formerly `onlyBuiltDependencies`).
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true

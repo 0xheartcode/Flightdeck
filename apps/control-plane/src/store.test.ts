@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+import type { LogLine, ServerMessage, ServiceInfo } from '@flightdeck/protocol';
+import { Store } from './store.js';
+
+function service(id: string): ServiceInfo {
+  return {
+    id,
+    name: id,
+    image: 'img',
+    containerId: 'c-' + id,
+    state: 'running',
+    host: 'test-host',
+    createdAt: 0,
+  };
+}
+
+function log(serviceId: string, line: string): LogLine {
+  return { serviceId, stream: 'stdout', ts: 0, line };
+}
+
+describe('Store', () => {
+  it('lists services sorted by id', () => {
+    const store = new Store(10);
+    store.upsertService(service('b'));
+    store.upsertService(service('a'));
+    expect(store.listServices().map((s) => s.id)).toEqual(['a', 'b']);
+  });
+
+  it('bounds the log ring buffer to bufferSize', () => {
+    const store = new Store(3);
+    store.upsertService(service('api'));
+    for (let i = 0; i < 10; i++) {
+      store.appendLog(log('api', `line ${i}`));
+    }
+    const lines = store.recentLogs('api');
+    expect(lines).toHaveLength(3);
+    expect(lines.map((l) => l.line)).toEqual(['line 7', 'line 8', 'line 9']);
+  });
+
+  it('delivers live logs to a subscriber and stops after unsubscribe', () => {
+    const store = new Store(10);
+    store.upsertService(service('api'));
+    const received: ServerMessage[] = [];
+    const unsub = store.subscribe('api', (m) => received.push(m));
+
+    store.appendLog(log('api', 'hello'));
+    expect(received).toHaveLength(1);
+    expect(received[0]?.type).toBe('log');
+
+    unsub();
+    store.appendLog(log('api', 'ignored'));
+    expect(received).toHaveLength(1);
+  });
+
+  it('notifies services listeners on upsert and removal', () => {
+    const store = new Store(10);
+    let latest: ServiceInfo[] = [];
+    store.subscribeServices((s) => {
+      latest = s;
+    });
+    store.upsertService(service('api'));
+    expect(latest.map((s) => s.id)).toEqual(['api']);
+    store.removeService('api');
+    expect(latest).toEqual([]);
+  });
+
+  it('updates service state on status change', () => {
+    const store = new Store(10);
+    store.upsertService(service('api'));
+    store.setStatus('api', 'exited', 137, 1);
+    expect(store.getService('api')?.state).toBe('exited');
+  });
+});

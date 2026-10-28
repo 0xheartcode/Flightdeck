@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+# -----------------------------------------------------------------------------
+# Agent image. Build the release binary, ship it on a slim runtime.
+# In production, prefer running the agent directly on the host (or as a
+# rootless Podman container) rather than giving a container the Docker socket.
+# -----------------------------------------------------------------------------
+
+FROM rust:1-bookworm AS build
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY agent ./agent
+RUN cargo build --release -p flightdeck-agent
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /build/target/release/flightdeck-agent /usr/local/bin/flightdeck-agent
+ENTRYPOINT ["/usr/local/bin/flightdeck-agent"]
