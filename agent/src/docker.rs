@@ -9,9 +9,13 @@ use bollard::config::ContainerSummaryStateEnum;
 use bollard::container::LogOutput;
 use bollard::query_parameters::{ListContainersOptionsBuilder, LogsOptionsBuilder};
 use futures_util::StreamExt;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 
 use crate::protocol::{AgentMessage, LogLine};
+
+/// Cap a single log line so a container printing a huge line (or binary junk)
+/// cannot blow up a WebSocket frame or the control plane's memory.
+const MAX_LINE_LEN: usize = 8192;
 
 /// A labelled container found during a discovery scan.
 #[derive(Debug, Clone)]
@@ -92,7 +96,7 @@ pub async fn stream_logs(
     docker: Docker,
     container_id: String,
     service_id: String,
-    tx: UnboundedSender<AgentMessage>,
+    tx: Sender<AgentMessage>,
 ) {
     let options = LogsOptionsBuilder::default()
         .stdout(true)
@@ -117,11 +121,12 @@ pub async fn stream_logs(
                     if line.is_empty() {
                         continue;
                     }
-                    let _ = tx.send(AgentMessage::log(LogLine {
+                    let line = truncate(line, MAX_LINE_LEN);
+                    let _ = tx.try_send(AgentMessage::log(LogLine {
                         service_id: service_id.clone(),
                         stream: stream_name,
                         ts: now_ms(),
-                        line: line.to_string(),
+                        line,
                     }));
                 }
             }
@@ -152,4 +157,42 @@ pub fn now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+/// Truncate a string to at most `max` bytes, respecting char boundaries, and
+/// mark it so readers know it was clipped.
+fn truncate(line: &str, max: usize) -> String {
+    if line.len() <= max {
+        return line.to_string();
+    }
+    let mut end = max;
+    while end > 0 && !line.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}… [truncated]", &line[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+
+    #[test]
+    fn short_lines_are_unchanged() {
+        assert_eq!(truncate("hello", 8192), "hello");
+    }
+
+    #[test]
+    fn long_lines_are_clipped_with_marker() {
+        let out = truncate(&"a".repeat(100), 10);
+        assert!(out.starts_with(&"a".repeat(10)));
+        assert!(out.ends_with("[truncated]"));
+    }
+
+    #[test]
+    fn truncation_respects_char_boundaries() {
+        // 'é' is two bytes; truncating at 5 bytes must not split it.
+        let s = "ééééé";
+        let out = truncate(s, 5);
+        assert!(out.ends_with("[truncated]"));
+    }
 }

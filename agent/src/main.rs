@@ -14,6 +14,10 @@ use crate::config::Config;
 use crate::docker::now_ms;
 use crate::protocol::{AgentMessage, ServiceInfo};
 
+/// Bounded outbound queue. If the control plane is down and a container is
+/// chatty, we drop new messages rather than grow memory without bound.
+const CHANNEL_CAPACITY: usize = 10_000;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -32,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
         "flightdeck agent starting",
     );
 
-    let (tx, rx) = mpsc::unbounded_channel::<AgentMessage>();
+    let (tx, rx) = mpsc::channel::<AgentMessage>(CHANNEL_CAPACITY);
     let agent_id = format!("{}-{}", config.hostname, std::process::id());
     let ws_handle = tokio::spawn(ws::run(
         config.control_plane_url.clone(),
@@ -52,10 +56,20 @@ async fn main() -> anyhow::Result<()> {
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                tracing::info!("received shutdown signal");
+                tracing::info!("SIGINT received, shutting down");
+                break;
+            }
+            _ = wait_terminate() => {
+                tracing::info!("SIGTERM received, shutting down");
                 break;
             }
             _ = tick.tick() => {
+                // Reap log tasks whose container stopped: the follow stream
+                // ended, so the task finished. A container that restarts keeps
+                // its id, so without this the dead task blocks a respawn and
+                // log collection silently stops.
+                log_tasks.retain(|_, handle| !handle.is_finished());
+
                 let found = match docker::discover(&docker, &config.label).await {
                     Ok(found) => found,
                     Err(err) => {
@@ -68,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
                 for container in &found {
                     seen.insert(container.container_id.clone());
 
-                    let _ = tx.send(AgentMessage::service(ServiceInfo {
+                    let _ = tx.try_send(AgentMessage::service(ServiceInfo {
                         id: container.service_id.clone(),
                         name: container.name.clone(),
                         image: container.image.clone(),
@@ -77,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
                         host: config.hostname.clone(),
                         created_at: container.created_at,
                     }));
-                    let _ = tx.send(AgentMessage::status(
+                    let _ = tx.try_send(AgentMessage::status(
                         container.service_id.clone(),
                         container.state.clone(),
                         None,
@@ -85,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
                     ));
 
                     if !log_tasks.contains_key(&container.container_id) {
-                        tracing::info!(service = %container.service_id, "tracking new service");
+                        tracing::info!(service = %container.service_id, "tracking service");
                         let handle = tokio::spawn(docker::stream_logs(
                             docker.clone(),
                             container.container_id.clone(),
@@ -99,14 +113,14 @@ async fn main() -> anyhow::Result<()> {
 
                 // Reap containers that disappeared since the last scan.
                 let gone: Vec<String> =
-                    log_tasks.keys().filter(|id| !seen.contains(*id)).cloned().collect();
+                    service_of.keys().filter(|id| !seen.contains(*id)).cloned().collect();
                 for id in gone {
                     if let Some(handle) = log_tasks.remove(&id) {
                         handle.abort();
                     }
                     if let Some(service_id) = service_of.remove(&id) {
                         tracing::info!(service = %service_id, "service gone");
-                        let _ = tx.send(AgentMessage::service_gone(service_id));
+                        let _ = tx.try_send(AgentMessage::service_gone(service_id));
                     }
                 }
             }
@@ -119,4 +133,22 @@ async fn main() -> anyhow::Result<()> {
     drop(tx);
     ws_handle.abort();
     Ok(())
+}
+
+/// Resolve when the process receives SIGTERM (container orchestrators send it
+/// on stop). On non-unix targets this never resolves.
+async fn wait_terminate() {
+    #[cfg(unix)]
+    {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        std::future::pending::<()>().await;
+    }
 }

@@ -31,3 +31,6 @@ logs/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Local-only tooling and reports (never shipped)
+/local/

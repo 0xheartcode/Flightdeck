@@ -5,9 +5,11 @@
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::Receiver;
 use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::http::Uri;
 
 use crate::protocol::AgentMessage;
 
@@ -16,11 +18,17 @@ pub async fn run(
     token: String,
     agent_id: String,
     hostname: String,
-    mut rx: UnboundedReceiver<AgentMessage>,
+    mut rx: Receiver<AgentMessage>,
 ) {
     loop {
-        let endpoint = with_token(&url, &token);
-        match connect_async(&endpoint).await {
+        let request = match build_request(&url, &token) {
+            Ok(request) => request,
+            Err(err) => {
+                tracing::error!(error = %err, "invalid control plane URL");
+                return;
+            }
+        };
+        match connect_async(request).await {
             Ok((mut ws, _)) => {
                 tracing::info!("connected to control plane");
 
@@ -78,12 +86,19 @@ async fn send(
     ws.send(Message::Text(json.into())).await.map_err(|_| ())
 }
 
-fn with_token(url: &str, token: &str) -> String {
-    if token.is_empty() {
-        return url.to_string();
+/// Build the handshake request, carrying the token in an `Authorization`
+/// header rather than the URL query so it does not land in proxy or access
+/// logs.
+fn build_request(
+    url: &str,
+    token: &str,
+) -> Result<ClientRequestBuilder, Box<dyn std::error::Error>> {
+    let uri: Uri = url.parse()?;
+    let mut builder = ClientRequestBuilder::new(uri);
+    if !token.is_empty() {
+        builder = builder.with_header("Authorization", format!("Bearer {token}"));
     }
-    let sep = if url.contains('?') { '&' } else { '?' };
-    format!("{url}{sep}token={token}")
+    Ok(builder)
 }
 
 async fn sleep_backoff() {
