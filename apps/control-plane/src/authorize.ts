@@ -15,7 +15,12 @@ export interface UpgradeDecision {
   ok: boolean;
   /** HTTP status to reply with when not ok (ignored when ok). */
   status: number;
+  /** Resolved agent name, set when an /agent upgrade is accepted. */
+  agentName?: string;
 }
+
+/** Resolve a presented agent token to its name, or null if unknown. */
+export type VerifyAgent = (token: string | undefined) => string | null;
 
 const ACCEPT: UpgradeDecision = { ok: true, status: 101 };
 
@@ -37,9 +42,15 @@ export function originOk(origin: string | undefined, corsOrigin: string): boolea
  *             query) when one is configured; open otherwise.
  *   other   - 404.
  */
-export function authorizeUpgrade(ctx: UpgradeContext, config: Config): UpgradeDecision {
+export function authorizeUpgrade(
+  ctx: UpgradeContext,
+  config: Config,
+  verifyAgent: VerifyAgent,
+): UpgradeDecision {
   if (ctx.pathname === '/agent') {
-    return tokenOk(config.agentToken, ctx.headerToken) ? ACCEPT : { ok: false, status: 401 };
+    // Agents must use the Authorization header; the token never goes in the URL.
+    const agentName = verifyAgent(ctx.headerToken);
+    return agentName ? { ok: true, status: 101, agentName } : { ok: false, status: 401 };
   }
 
   if (ctx.pathname === '/stream') {

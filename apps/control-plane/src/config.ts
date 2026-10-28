@@ -4,8 +4,12 @@ import { dirname, join } from 'node:path';
 export interface Config {
   host: string;
   port: number;
-  /** Shared bearer token agents must present. Empty = reject all agents. */
+  /** Single shared agent token (fallback when no per-agent credentials set). */
   agentToken: string;
+  /** Inline per-agent credentials: `name:token` entries, comma or newline separated. */
+  agentTokens: string;
+  /** Path to a file of per-agent `name:token` lines (hot-reloaded for revocation). */
+  agentTokensFile: string;
   /** Optional token the browser API + stream require. Empty = open (dev). */
   dashboardToken: string;
   /** Allowed CORS origin for the REST API. '*' allows any (not recommended). */
@@ -55,6 +59,8 @@ export function loadConfig(): Config {
     host: process.env.FD_CONTROL_PLANE_HOST ?? '0.0.0.0',
     port: num(process.env.FD_CONTROL_PLANE_PORT, 4000),
     agentToken: process.env.FD_AGENT_TOKEN ?? '',
+    agentTokens: process.env.FD_AGENT_TOKENS ?? '',
+    agentTokensFile: process.env.FD_AGENT_TOKENS_FILE ?? '',
     dashboardToken: process.env.FD_DASHBOARD_TOKEN ?? '',
     corsOrigin: process.env.FD_CORS_ORIGIN ?? 'http://localhost:5173',
     logBufferSize: num(process.env.FD_LOG_BUFFER_SIZE, 2000),
@@ -62,9 +68,8 @@ export function loadConfig(): Config {
     maxServices: num(process.env.FD_MAX_SERVICES, 1000),
   };
 
-  if (!config.agentToken) {
-    console.warn('[config] FD_AGENT_TOKEN is empty; all agent connections will be rejected.');
-  }
+  // Agent-credential presence is validated by the CredentialStore, which
+  // warns when none are configured (FD_AGENT_TOKEN / FD_AGENT_TOKENS[_FILE]).
   if (!config.dashboardToken) {
     console.warn(
       '[config] FD_DASHBOARD_TOKEN is empty; the browser API and log stream are UNAUTHENTICATED. ' +

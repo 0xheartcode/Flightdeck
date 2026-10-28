@@ -29,11 +29,15 @@ Mitigations, strongest first:
   and the token is compared in constant time.
 - The agent supports `wss://`, so terminate the control plane behind TLS in
   production and point `FD_CONTROL_PLANE_URL` at `wss://...`.
-- The token is a shared secret for now. A connection may only report for
-  services it announced, and only for its own host, so one token holder cannot
-  spoof or clobber another host's services, and a service is removed when the
-  agent that announced it disconnects. Unique per-agent credentials (so a
-  leaked token can be revoked for one agent) remain a planned hardening.
+- Each agent can have its own credential. Configure a set of `name:token`
+  pairs (via `FD_AGENT_TOKENS_FILE`, `FD_AGENT_TOKENS`, or a single
+  `FD_AGENT_TOKEN`); a presented token resolves to a named identity, and tokens
+  are compared in constant time. To revoke one agent, remove its line from the
+  file: the control plane reloads credentials periodically, rejects the token
+  on reconnect, and drops the live connection whose credential was removed.
+- A connection may only report for services it announced, and only for its own
+  host, so one credential cannot spoof or clobber another host's services, and
+  a service is removed when the agent that announced it disconnects.
 
 ## Browser to control plane
 

@@ -21,6 +21,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- Per-agent credentials: configure `name:token` pairs (file or inline) so each
+  agent has its own token resolving to a named identity. Removing an agent's
+  line revokes it: the control plane reloads credentials, rejects the token on
+  reconnect, and drops the live connection. A single `FD_AGENT_TOKEN` still
+  works for simple setups.
 - A control-plane connection may only report for services it announced, and
   only for its own host, preventing cross-connection spoofing or clobbering.
 

@@ -8,6 +8,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     host: '0.0.0.0',
     port: 4000,
     agentToken: 'agent-secret',
+    agentTokens: '',
+    agentTokensFile: '',
     dashboardToken: '',
     corsOrigin: 'http://localhost:5173',
     logBufferSize: 2000,
