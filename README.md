@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted deployment control plane for containers on your own servers. Railway-style ergonomics, your hardware.
 
-> **Status:** v0.1.0. The spine works end to end: a Rust agent discovers labelled containers on a host, streams their console logs over WebSocket to the control plane, and a React UI shows services and live logs. Deploy correlation from GitHub Actions, env surfacing, and restart/redeploy are on the roadmap.
+> **Status:** v0.1.0. The spine works end to end: a Rust agent discovers labelled containers on a host, streams their console logs, CPU/memory, and status (including exit codes) over WebSocket to the control plane, and a React UI shows services with live logs and resource usage. Deploy correlation from GitHub Actions, env surfacing, and restart/redeploy are on the roadmap.
 
 ## Why this exists
 
@@ -41,6 +41,16 @@ It talks to the **Docker-compatible API**, so the same agent runs against Docker
 ## Quick start
 
 Prerequisites: Node 24+, pnpm (via corepack), Rust stable, and a reachable Docker or Podman socket. Run `just doctor` to check.
+
+Fastest, everything in containers (control plane, web UI, agent, and a sample service):
+
+```bash
+echo "FD_AGENT_TOKEN=$(openssl rand -hex 32)" > .env
+just demo            # docker compose up --build
+# open http://localhost:8080
+```
+
+Or run it from source for development:
 
 ```bash
 corepack enable
@@ -85,11 +95,11 @@ just check          # pnpm check (format, lint, typecheck, test, build) + cargo 
 
 ## Security
 
-The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production, authenticate the agent to the control plane with a strong `FD_AGENT_TOKEN`, and keep the agent command-scoped. See [docs/security.md](docs/security.md).
+The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production. Agents authenticate with a bearer token (sent as a header, compared in constant time, `wss://` supported): use a single `FD_AGENT_TOKEN`, or give each agent its own credential via `FD_AGENT_TOKENS` / `FD_AGENT_TOKENS_FILE` so one can be revoked individually (the control plane reloads the file and drops the revoked connection). The browser API and log stream are gated by `FD_DASHBOARD_TOKEN` when set, CORS is restricted to `FD_CORS_ORIGIN` (not `*`), and the `/stream` upgrade checks `Origin`. Both WebSocket servers cap frame size and the registry is bounded. See [docs/security.md](docs/security.md) for the full threat model and knobs.
 
 ## Roadmap
 
-See [docs/architecture.md](docs/architecture.md) for the full picture. Next up: resource stats, restart/redeploy actions, GitHub Actions deploy correlation, and read-only env surfacing.
+See [docs/architecture.md](docs/architecture.md) for the full picture. Next up: restart/redeploy actions, GitHub Actions deploy correlation, and read-only env surfacing.
 
 ## License
 

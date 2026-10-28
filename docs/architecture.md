@@ -56,8 +56,6 @@ container stdout/stderr
 
 ## Roadmap
 
-- **Resource stats**: the protocol already carries a `stats` message; wire the
-  agent's `docker.stats` stream and render cpu/mem sparklines.
 - **Actions**: restart and redeploy, sent control-plane -> agent over the
   existing socket, strictly allowlisted (no arbitrary exec).
 - **Deploy correlation**: ingest GitHub Actions webhooks and link a workflow

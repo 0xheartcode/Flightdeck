@@ -30,13 +30,13 @@ export type ServiceState = z.infer<typeof ServiceState>;
 /** A deployable unit the agent is tracking (one labelled container). */
 export const ServiceInfo = z.object({
   /** Stable id: the `flightdeck.service` label, else the container name. */
-  id: z.string().min(1),
-  name: z.string().min(1),
-  image: z.string(),
-  containerId: z.string(),
+  id: z.string().min(1).max(256),
+  name: z.string().min(1).max(256),
+  image: z.string().max(512),
+  containerId: z.string().max(128),
   state: ServiceState,
   /** Hostname of the server this service runs on. */
-  host: z.string(),
+  host: z.string().max(256),
   createdAt: z.number().int(),
 });
 export type ServiceInfo = z.infer<typeof ServiceInfo>;
@@ -45,11 +45,13 @@ export const LogStream = z.enum(['stdout', 'stderr']);
 export type LogStream = z.infer<typeof LogStream>;
 
 export const LogLine = z.object({
-  serviceId: z.string(),
+  serviceId: z.string().min(1).max(256),
   stream: LogStream,
   /** Epoch milliseconds. */
   ts: z.number().int(),
-  line: z.string(),
+  // Bounded so one giant line cannot bloat a frame or the in-memory buffer.
+  // The agent truncates at 8 KB; this leaves headroom for multi-byte chars.
+  line: z.string().max(16384),
 });
 export type LogLine = z.infer<typeof LogLine>;
 
@@ -69,8 +71,8 @@ const base = { v: z.literal(PROTOCOL_VERSION) };
 export const AgentHello = z.object({
   ...base,
   type: z.literal('hello'),
-  agentId: z.string(),
-  hostname: z.string(),
+  agentId: z.string().max(256),
+  hostname: z.string().max(256),
 });
 
 export const AgentService = z.object({

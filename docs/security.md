@@ -23,12 +23,41 @@ Mitigations, strongest first:
 
 ## Agent to control plane
 
-- The agent authenticates with a shared bearer token (`FD_AGENT_TOKEN`).
-  Generate a strong value (`openssl rand -hex 32`). An empty token rejects all
-  agent connections.
-- In production, terminate the control plane behind TLS and use `wss://`.
-- The token is a shared secret for now. Per-agent credentials and mTLS are a
-  planned hardening.
+- The agent authenticates with a shared bearer token (`FD_AGENT_TOKEN`),
+  sent in an `Authorization: Bearer` header (never in the URL). Generate a
+  strong value (`openssl rand -hex 32`). An empty token rejects all agents,
+  and the token is compared in constant time.
+- The agent supports `wss://`, so terminate the control plane behind TLS in
+  production and point `FD_CONTROL_PLANE_URL` at `wss://...`.
+- Each agent can have its own credential. Configure a set of `name:token`
+  pairs (via `FD_AGENT_TOKENS_FILE`, `FD_AGENT_TOKENS`, or a single
+  `FD_AGENT_TOKEN`); a presented token resolves to a named identity, and tokens
+  are compared in constant time. To revoke one agent, remove its line from the
+  file: the control plane reloads credentials periodically, rejects the token
+  on reconnect, and drops the live connection whose credential was removed.
+- A connection may only report for services it announced, and only for its own
+  host, so one credential cannot spoof or clobber another host's services, and
+  a service is removed when the agent that announced it disconnects.
+
+## Browser to control plane
+
+- The REST API and the `/stream` WebSocket are gated by `FD_DASHBOARD_TOKEN`
+  when it is set; when unset they are unauthenticated, so set it for anything
+  beyond a trusted network. The web UI sends it via `VITE_FD_DASHBOARD_TOKEN`
+  (baked into the bundle: this gates casual and cross-origin access, not a
+  determined local user).
+- CORS is restricted to `FD_CORS_ORIGIN` (not `*` by default), and the
+  `/stream` WebSocket upgrade validates the `Origin` header against it, since
+  WebSockets otherwise bypass CORS entirely.
+
+## Denial of service
+
+- Both WebSocket servers cap frame size (`FD_MAX_PAYLOAD_BYTES`), the service
+  registry is capped (`FD_MAX_SERVICES`), each browser socket is limited in how
+  many services it may subscribe to, and a slow consumer has live frames
+  dropped rather than buffered without bound. The agent caps each log line and
+  uses a bounded outbound queue so a control-plane outage cannot exhaust its
+  memory.
 
 ## Logs and secrets
 
