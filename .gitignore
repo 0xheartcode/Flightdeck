@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Test / tooling caches
+coverage/
+.turbo/
+.vite/
+
+# Rust agent (cargo workspace target at repo root)
+/target/
+**/*.rs.bk
+
+# Env & local secrets (keep *.example tracked)
+.env
+.env.*.local
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1
+# -----------------------------------------------------------------------------
+# Control plane image. Multi-stage: build the workspace, then ship a slim,
+# self-contained production deployment on a non-root user.
+# -----------------------------------------------------------------------------
+
+FROM node:24-alpine AS base
+RUN apk add --no-cache libc6-compat
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+WORKDIR /repo
+
+FROM base AS build
+COPY . .
+RUN pnpm install --frozen-lockfile
+# `...` builds @flightdeck/protocol (a workspace dependency) first.
+RUN pnpm --filter @flightdeck/control-plane... build
+# Produce a standalone dir with only production dependencies.
+RUN pnpm --filter @flightdeck/control-plane deploy --prod /app
+
+FROM node:24-alpine AS runtime
+RUN apk add --no-cache dumb-init
+ENV NODE_ENV=production
+ENV FD_CONTROL_PLANE_PORT=4000
+WORKDIR /app
+RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -G nodejs -S nodejs
+COPY --from=build --chown=nodejs:nodejs /app /app
+USER nodejs
+EXPOSE 4000
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/index.js"]
