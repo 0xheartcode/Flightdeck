@@ -58,11 +58,11 @@ describe('protocol', () => {
     expect(msg.type).toBe('subscribe');
   });
 
-  it('parses a client restart action and rejects unknown actions', () => {
-    const msg = parseClientMessage(
-      JSON.stringify({ type: 'action', action: 'restart', serviceId: 'api' }),
-    );
-    expect(msg.type).toBe('action');
+  it('parses restart and redeploy actions and rejects unknown ones', () => {
+    for (const action of ['restart', 'redeploy']) {
+      const msg = parseClientMessage(JSON.stringify({ type: 'action', action, serviceId: 'api' }));
+      expect(msg.type).toBe('action');
+    }
     expect(() =>
       parseClientMessage(JSON.stringify({ type: 'action', action: 'nuke', serviceId: 'api' })),
     ).toThrow();

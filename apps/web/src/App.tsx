@@ -7,7 +7,7 @@ import { LogViewer } from '@/components/LogViewer';
 export function App() {
   const { data: services = [], isLoading, isError } = useServices();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { logs, connected, stats, status, actionResult, actionPending, restart } =
+  const { logs, connected, stats, status, actionResult, actionPending, sendAction } =
     useLogStream(selectedId);
 
   const selected = services.find((s) => s.id === selectedId) ?? null;
@@ -43,7 +43,7 @@ export function App() {
               status={status}
               actionResult={actionResult}
               actionPending={actionPending}
-              onRestart={restart}
+              onAction={sendAction}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-600">

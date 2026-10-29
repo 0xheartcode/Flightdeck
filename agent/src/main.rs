@@ -179,6 +179,9 @@ async fn execute_command(docker: Docker, cmd: IncomingCommand, tx: Sender<AgentM
         "restart" => docker::restart(&docker, &cmd.container_id)
             .await
             .map_err(|e| e.to_string()),
+        "redeploy" => docker::redeploy(&docker, &cmd.container_id)
+            .await
+            .map_err(|e| e.to_string()),
         other => Err(format!("unsupported action: {other}")),
     };
     let (ok, error) = match outcome {

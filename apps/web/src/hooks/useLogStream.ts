@@ -23,7 +23,7 @@ export interface LogStream {
   status: LiveStatus | null;
   actionResult: ActionResult | null;
   actionPending: boolean;
-  restart: () => void;
+  sendAction: (action: ActionKind) => void;
 }
 
 /**
@@ -105,13 +105,16 @@ export function useLogStream(serviceId: string | null): LogStream {
     };
   }, [serviceId]);
 
-  const restart = useCallback(() => {
-    const ws = wsRef.current;
-    if (!serviceId || !ws || ws.readyState !== WebSocket.OPEN) return;
-    setActionResult(null);
-    setActionPending(true);
-    ws.send(JSON.stringify({ type: 'action', action: 'restart', serviceId }));
-  }, [serviceId]);
+  const sendAction = useCallback(
+    (action: ActionKind) => {
+      const ws = wsRef.current;
+      if (!serviceId || !ws || ws.readyState !== WebSocket.OPEN) return;
+      setActionResult(null);
+      setActionPending(true);
+      ws.send(JSON.stringify({ type: 'action', action, serviceId }));
+    },
+    [serviceId],
+  );
 
-  return { logs, connected, stats, status, actionResult, actionPending, restart };
+  return { logs, connected, stats, status, actionResult, actionPending, sendAction };
 }

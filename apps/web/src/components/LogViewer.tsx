@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { LogLine, Stats } from '@flightdeck/protocol';
+import type { ActionKind, LogLine, Stats } from '@flightdeck/protocol';
 import type { ActionResult, LiveStatus } from '@/hooks/useLogStream';
 import { cx, formatBytes, formatTime } from '@/lib/format';
 
@@ -11,7 +11,7 @@ interface Props {
   status: LiveStatus | null;
   actionResult: ActionResult | null;
   actionPending: boolean;
-  onRestart: () => void;
+  onAction: (action: ActionKind) => void;
 }
 
 export function LogViewer({
@@ -22,7 +22,7 @@ export function LogViewer({
   status,
   actionResult,
   actionPending,
-  onRestart,
+  onAction,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -30,9 +30,9 @@ export function LogViewer({
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const handleRestart = (): void => {
-    if (window.confirm(`Restart ${serviceName}?`)) {
-      onRestart();
+  const confirmAction = (action: ActionKind, prompt: string): void => {
+    if (window.confirm(`${prompt} ${serviceName}?`)) {
+      onAction(action);
     }
   };
 
@@ -58,17 +58,27 @@ export function LogViewer({
         )}
         {actionResult && (
           <span className={actionResult.ok ? 'text-emerald-400' : 'text-rose-400'}>
-            {actionResult.ok ? 'restarted' : `restart failed: ${actionResult.error ?? 'error'}`}
+            {actionResult.ok
+              ? `${actionResult.action} ok`
+              : `${actionResult.action} failed: ${actionResult.error ?? 'error'}`}
           </span>
         )}
-        <span className="ml-auto flex items-center gap-3">
+        <span className="ml-auto flex items-center gap-2">
           <button
             type="button"
-            onClick={handleRestart}
+            onClick={() => confirmAction('restart', 'Restart')}
             disabled={actionPending}
             className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {actionPending ? 'restarting...' : 'Restart'}
+            Restart
+          </button>
+          <button
+            type="button"
+            onClick={() => confirmAction('redeploy', 'Redeploy')}
+            disabled={actionPending}
+            className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {actionPending ? 'working...' : 'Redeploy'}
           </button>
           <span className="tabular-nums">{logs.length} lines</span>
         </span>
