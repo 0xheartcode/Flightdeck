@@ -18,8 +18,9 @@ One static binary per server. Responsibilities:
    on connect and reconnecting with backoff on drop.
 
 The agent also executes allowlisted commands sent by the control plane
-(currently `restart`), reporting the result. Anything not on the allowlist is
-rejected; there is no arbitrary execution.
+(`restart`, and `redeploy` which re-pulls the image and recreates the
+container with the same config), reporting the result. Anything not on the
+allowlist is rejected; there is no arbitrary execution.
 
 ### Control plane (`apps/control-plane/`, TypeScript)
 
@@ -59,9 +60,6 @@ container stdout/stderr
 ```
 
 ## Roadmap
-
-- **Redeploy action**: pull a new image tag and recreate the container,
-  alongside the existing restart action.
 - **Deploy correlation**: ingest GitHub Actions webhooks and link a workflow
   run / image tag to the service it deployed, producing a deploy timeline.
 - **Env surfacing**: show the env var names a container runs with, values

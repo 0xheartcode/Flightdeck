@@ -52,10 +52,12 @@ Mitigations, strongest first:
 
 ## Operator actions
 
-- Actions that change a container (currently `restart`) are **off by default**
-  and only enabled with `FD_ENABLE_ACTIONS=true`. The agent executes an
-  allowlist of actions and rejects anything else, so there is no arbitrary
-  command execution through the agent.
+- Actions that change a container (`restart`, and `redeploy` which recreates it
+  from a freshly pulled image) are **off by default** and only enabled with
+  `FD_ENABLE_ACTIONS=true`. The agent executes an allowlist of actions and
+  rejects anything else, so there is no arbitrary command execution through the
+  agent. Redeploy renames the old container aside and restores it if the new
+  one fails to start.
 - When actions are enabled, set `FD_DASHBOARD_TOKEN` so only authenticated
   browsers can trigger them (the control plane warns if actions are on without
   a dashboard token). An action is routed only to the agent that owns the

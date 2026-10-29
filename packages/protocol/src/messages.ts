@@ -130,7 +130,7 @@ export type AgentMessage = z.infer<typeof AgentMessage>;
 // --- Control plane -> agent (commands) -------------------------------------
 
 /** Actions an operator can trigger. Allowlisted: no arbitrary execution. */
-export const ActionKind = z.enum(['restart']);
+export const ActionKind = z.enum(['restart', 'redeploy']);
 export type ActionKind = z.infer<typeof ActionKind>;
 
 export const ServerCommand = z.object({

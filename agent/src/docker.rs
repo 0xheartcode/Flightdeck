@@ -236,6 +236,142 @@ pub async fn restart(docker: &Docker, container_id: &str) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Redeploy a container: pull its image again, then recreate it with the same
+/// configuration under the same name. The old container is renamed aside first
+/// so that, if creation or startup of the new one fails, we restore it rather
+/// than leave the service down. This recreates in place and reattaches the
+/// primary network; multi-network or compose-managed containers may need
+/// manual handling.
+pub async fn redeploy(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
+    use bollard::query_parameters::{
+        CreateContainerOptionsBuilder, CreateImageOptionsBuilder, RemoveContainerOptionsBuilder,
+        RenameContainerOptionsBuilder, StartContainerOptions,
+    };
+
+    let inspect = docker.inspect_container(container_id, None).await?;
+    let config = inspect
+        .config
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("container has no config to recreate"))?;
+    let image = config
+        .image
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("container has no image"))?;
+    let name = inspect
+        .name
+        .as_deref()
+        .map(|n| n.trim_start_matches('/').to_string())
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("container has no name"))?;
+
+    // 1. Pull the image (picks up a newer image for the same tag).
+    let (from_image, tag) = split_image_ref(&image);
+    let mut opts = CreateImageOptionsBuilder::default().from_image(&from_image);
+    if let Some(tag) = &tag {
+        opts = opts.tag(tag);
+    }
+    let mut pull = docker.create_image(Some(opts.build()), None, None);
+    while let Some(item) = pull.next().await {
+        item?;
+    }
+
+    // 2. Build the create body from the existing config + host config.
+    let body = create_body_from(&config, inspect.host_config.as_ref())?;
+
+    // 3. Move the old container aside so its name is free (rollback target).
+    let backup = format!("{name}-fd-prev-{}", now_ms());
+    docker
+        .rename_container(
+            container_id,
+            RenameContainerOptionsBuilder::default()
+                .name(&backup)
+                .build(),
+        )
+        .await?;
+
+    // 4. Create and start the new container; roll back on any failure.
+    let create = docker
+        .create_container(
+            Some(CreateContainerOptionsBuilder::default().name(&name).build()),
+            body,
+        )
+        .await;
+    let new_id = match create {
+        Ok(resp) => resp.id,
+        Err(err) => {
+            rollback(docker, container_id, &name).await;
+            return Err(anyhow::anyhow!("create failed: {err}"));
+        }
+    };
+    if let Err(err) = docker
+        .start_container(&new_id, None::<StartContainerOptions>)
+        .await
+    {
+        let _ = docker
+            .remove_container(
+                &new_id,
+                Some(RemoveContainerOptionsBuilder::default().force(true).build()),
+            )
+            .await;
+        rollback(docker, container_id, &name).await;
+        return Err(anyhow::anyhow!("start failed: {err}"));
+    }
+
+    // 5. Success: remove the old (renamed) container.
+    let _ = docker
+        .remove_container(
+            container_id,
+            Some(RemoveContainerOptionsBuilder::default().force(true).build()),
+        )
+        .await;
+    Ok(())
+}
+
+/// Restore the old container after a failed redeploy: rename it back and start it.
+async fn rollback(docker: &Docker, old_id: &str, name: &str) {
+    use bollard::query_parameters::{RenameContainerOptionsBuilder, StartContainerOptions};
+    let _ = docker
+        .rename_container(
+            old_id,
+            RenameContainerOptionsBuilder::default().name(name).build(),
+        )
+        .await;
+    let _ = docker
+        .start_container(old_id, None::<StartContainerOptions>)
+        .await;
+}
+
+/// Turn an inspected container config into a create body, carrying over the
+/// host config. Uses a serde round-trip so every config field is preserved
+/// without copying each one by hand (both types model the same Docker API).
+fn create_body_from(
+    config: &bollard::config::ContainerConfig,
+    host_config: Option<&bollard::config::HostConfig>,
+) -> anyhow::Result<bollard::models::ContainerCreateBody> {
+    let mut body = serde_json::to_value(config)?;
+    if let (serde_json::Value::Object(map), Some(hc)) = (&mut body, host_config) {
+        map.insert("HostConfig".to_string(), serde_json::to_value(hc)?);
+    }
+    Ok(serde_json::from_value(body)?)
+}
+
+/// Split an image reference into (repository, tag). Digest refs keep the whole
+/// string as the repository with no tag.
+fn split_image_ref(image: &str) -> (String, Option<String>) {
+    if image.contains('@') {
+        return (image.to_string(), None);
+    }
+    let last_segment = image.rsplit('/').next().unwrap_or(image);
+    match last_segment.rfind(':') {
+        Some(idx) => {
+            let tag = last_segment[idx + 1..].to_string();
+            let repo_len = image.len() - last_segment.len() + idx;
+            (image[..repo_len].to_string(), Some(tag))
+        }
+        None => (image.to_string(), Some("latest".to_string())),
+    }
+}
+
 fn state_to_str(state: &ContainerSummaryStateEnum) -> &'static str {
     use ContainerSummaryStateEnum::*;
     match state {
@@ -272,7 +408,33 @@ fn truncate(line: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{cpu_percent, truncate, unique_service_id};
+    use super::{cpu_percent, split_image_ref, truncate, unique_service_id};
+
+    #[test]
+    fn split_image_ref_handles_tags_digests_and_registries() {
+        assert_eq!(
+            split_image_ref("alpine"),
+            ("alpine".into(), Some("latest".into()))
+        );
+        assert_eq!(
+            split_image_ref("alpine:3.20"),
+            ("alpine".into(), Some("3.20".into()))
+        );
+        assert_eq!(
+            split_image_ref("ghcr.io/acme/api:v1"),
+            ("ghcr.io/acme/api".into(), Some("v1".into())),
+        );
+        // registry with a port must not be mistaken for a tag
+        assert_eq!(
+            split_image_ref("localhost:5000/app"),
+            ("localhost:5000/app".into(), Some("latest".into())),
+        );
+        // digest pin: whole ref, no tag
+        assert_eq!(
+            split_image_ref("alpine@sha256:abc"),
+            ("alpine@sha256:abc".into(), None)
+        );
+    }
 
     #[test]
     fn short_lines_are_unchanged() {
