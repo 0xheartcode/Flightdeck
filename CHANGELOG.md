@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Action audit trail: every operator action is recorded (who/what/when/outcome)
+  to the structured log and `/api/audit`, and optionally appended as JSONL
+  (`FD_AUDIT_LOG_FILE`) so it survives a restart.
+- Prometheus metrics at `/metrics` (connected agents, services, log lines,
+  action totals).
+- Integration test that starts the control plane with a fake agent and browser
+  client and asserts the full flow (log streaming and a routed action).
+- CI: supply-chain audit with cargo-deny (`deny.toml` + `just audit`) and a
+  Docker build-validation job; a Dependabot config for npm and GitHub Actions.
+
 - Restart action: restart a container from the UI. The control plane routes an
   allowlisted command to the agent that owns the service and reports the
   result. Off by default; enable with `FD_ENABLE_ACTIONS=true`.

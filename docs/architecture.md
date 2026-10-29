@@ -25,7 +25,8 @@ allowlist is rejected; there is no arbitrary execution.
 ### Control plane (`apps/control-plane/`, TypeScript)
 
 - **HTTP (Hono)**: `GET /api/health`, `GET /api/services`,
-  `GET /api/services/:id` (service + recent log tail).
+  `GET /api/services/:id` (service + recent log tail), `GET /api/audit` (action
+  trail), and `GET /metrics` (Prometheus, unauthenticated, counts only).
 - **WS `/agent`**: token-authenticated. Agents push `service`, `status`,
   `log`, and `service_gone` messages, applied to the store.
 - **WS `/stream`**: browsers connect, receive the live service list, and on

@@ -1,19 +1,14 @@
 import { WebSocket } from 'ws';
 import { parseAgentMessage, type ServerCommand } from '@flightdeck/protocol';
-import type { CommandBus } from './commands.js';
+import type { Context } from './context.js';
 import { logger } from './logger.js';
-import type { Store } from './store.js';
 
 /**
  * Wire a single authenticated agent socket into the store. The upgrade
- * handler in index.ts has already verified the bearer token before this runs.
+ * handler has already verified the bearer token before this runs.
  */
-export function handleAgentConnection(
-  ws: WebSocket,
-  store: Store,
-  commands: CommandBus,
-  agentName: string,
-): void {
+export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: string): void {
+  const { store, commands, metrics } = ctx;
   // Services announced over this connection. Used to remove them when the
   // agent disconnects (a dead host must not linger as a false "running"), and
   // to stop one connection from reporting for services it did not announce.
@@ -65,6 +60,7 @@ export function handleAgentConnection(
       case 'log':
         if (!owned.has(msg.log.serviceId)) break;
         store.appendLog(msg.log);
+        metrics.incLogLines();
         break;
       case 'stats':
         if (!owned.has(msg.stats.serviceId)) break;

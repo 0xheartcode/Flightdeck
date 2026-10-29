@@ -62,6 +62,15 @@ Mitigations, strongest first:
   browsers can trigger them (the control plane warns if actions are on without
   a dashboard token). An action is routed only to the agent that owns the
   target service.
+- Every action is recorded to an audit trail (who/what/when/outcome): to the
+  structured log, to `/api/audit`, and, if `FD_AUDIT_LOG_FILE` is set, appended
+  as JSONL so it survives a restart.
+
+## Metrics
+
+- Prometheus metrics are served at `/metrics` without authentication. They
+  expose counts only (connected agents, services, log lines, action totals),
+  no secrets. Restrict the endpoint at the network layer if needed.
 
 ## Denial of service
 

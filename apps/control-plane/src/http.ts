@@ -1,12 +1,21 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { Config } from './config.js';
 import { bearer, tokenOk } from './auth.js';
-import type { Store } from './store.js';
+import type { Context } from './context.js';
 
-/** REST surface consumed by the web UI (live log streaming is over WS). */
-export function createHttpApp(store: Store, config: Config): Hono {
+/**
+ * REST surface for the web UI plus a Prometheus metrics endpoint. Live log
+ * streaming is over WebSocket, not here.
+ */
+export function createHttpApp(ctx: Context, agentCount: () => number): Hono {
+  const { config, store, audit, metrics } = ctx;
   const app = new Hono();
+
+  // Metrics are unauthenticated (counts only, no secrets) and outside /api so
+  // the CORS and dashboard-token middleware below do not apply.
+  app.get('/metrics', (c) =>
+    c.text(metrics.render({ agents: agentCount(), services: store.listServices().length })),
+  );
 
   app.use('/api/*', cors({ origin: config.corsOrigin }));
 
@@ -14,7 +23,6 @@ export function createHttpApp(store: Store, config: Config): Hono {
   // request must present it; when unset, the API is open (dev mode, warned).
   if (config.dashboardToken) {
     app.use('/api/*', async (c, next) => {
-      // Allow CORS preflight through without auth.
       if (c.req.method === 'OPTIONS') return next();
       if (!tokenOk(config.dashboardToken, bearer(c.req.header('authorization')))) {
         return c.json({ error: 'unauthorized' }, 401);
@@ -34,6 +42,11 @@ export function createHttpApp(store: Store, config: Config): Hono {
       return c.json({ error: 'not_found' }, 404);
     }
     return c.json({ service, logs: store.recentLogs(id) });
+  });
+
+  app.get('/api/audit', (c) => {
+    const limit = Number(c.req.query('limit'));
+    return c.json({ audit: audit.list(Number.isFinite(limit) && limit > 0 ? limit : undefined) });
   });
 
   return app;
