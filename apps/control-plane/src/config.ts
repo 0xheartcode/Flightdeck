@@ -25,6 +25,10 @@ export interface Config {
   actionsEnabled: boolean;
   /** How long to wait for an agent to report a command result. */
   actionTimeoutMs: number;
+  /** Max audit entries kept in memory (served at /api/audit). */
+  auditMax: number;
+  /** Optional path to append the audit trail as JSONL (survives restart). */
+  auditFile: string;
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -73,6 +77,8 @@ export function loadConfig(): Config {
     maxServices: num(process.env.FD_MAX_SERVICES, 1000),
     actionsEnabled: process.env.FD_ENABLE_ACTIONS === 'true',
     actionTimeoutMs: num(process.env.FD_ACTION_TIMEOUT_MS, 20_000),
+    auditMax: num(process.env.FD_AUDIT_MAX, 500),
+    auditFile: process.env.FD_AUDIT_LOG_FILE ?? '',
   };
 
   // Agent-credential presence is validated by the CredentialStore, which

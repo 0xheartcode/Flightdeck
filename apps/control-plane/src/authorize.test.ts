@@ -15,6 +15,8 @@ const base: Config = {
   maxServices: 1000,
   actionsEnabled: false,
   actionTimeoutMs: 20_000,
+  auditMax: 500,
+  auditFile: '',
 };
 
 // Resolves the one known token to the agent name "edge-1".
