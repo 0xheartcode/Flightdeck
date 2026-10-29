@@ -19,6 +19,8 @@ const base: Config = {
   auditFile: '',
   dbFile: ':memory:',
   githubWebhookSecret: '',
+  maxConnections: 1000,
+  actionRatePerMin: 30,
 };
 
 // Resolves the one known token to the agent name "edge-1".

@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { parseClientMessage, type ActionKind, type ServerMessage } from '@flightdeck/protocol';
 import type { Context } from './context.js';
+import { RateLimiter } from './ratelimit.js';
 
 /** Max distinct services one browser socket may subscribe to. */
 const MAX_SUBSCRIPTIONS = 50;
@@ -15,6 +16,7 @@ const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
 export function handleClientConnection(ws: WebSocket, ctx: Context, actor: string): void {
   const { store, commands, config, audit, metrics, deploys } = ctx;
   const unsubscribers = new Map<string, () => void>();
+  const actionLimiter = new RateLimiter(config.actionRatePerMin, 60_000);
 
   const send = (msg: ServerMessage): void => {
     if (ws.readyState !== WebSocket.OPEN) return;
@@ -73,6 +75,11 @@ export function handleClientConnection(ws: WebSocket, ctx: Context, actor: strin
       send({ type: 'action_result', serviceId, action, ok, error });
     };
 
+    // Rate limit before anything else, so a spammer cannot flood the audit log.
+    if (!actionLimiter.allow()) {
+      send({ type: 'action_result', serviceId, action, ok: false, error: 'rate limited' });
+      return;
+    }
     if (!config.actionsEnabled) {
       finish(false, 'actions are disabled');
       return;

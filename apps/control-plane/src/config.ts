@@ -33,6 +33,10 @@ export interface Config {
   dbFile: string;
   /** GitHub webhook HMAC secret; empty disables the webhook endpoint. */
   githubWebhookSecret: string;
+  /** Max concurrent WebSocket connections (agents + browsers). */
+  maxConnections: number;
+  /** Max operator actions a single browser socket may trigger per minute. */
+  actionRatePerMin: number;
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -85,6 +89,8 @@ export function loadConfig(): Config {
     auditFile: process.env.FD_AUDIT_LOG_FILE ?? '',
     dbFile: process.env.FD_DB_FILE ?? ':memory:',
     githubWebhookSecret: process.env.FD_GITHUB_WEBHOOK_SECRET ?? '',
+    maxConnections: num(process.env.FD_MAX_CONNECTIONS, 1000),
+    actionRatePerMin: num(process.env.FD_ACTION_RATE_PER_MIN, 30),
   };
 
   // Agent-credential presence is validated by the CredentialStore, which

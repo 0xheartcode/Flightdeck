@@ -44,6 +44,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- Rate limiting: a cap on concurrent WebSocket connections
+  (`FD_MAX_CONNECTIONS`) and on operator actions per browser per minute
+  (`FD_ACTION_RATE_PER_MIN`), checked before anything else so action spam cannot
+  flood the audit log.
 - Per-agent credentials: configure `name:token` pairs (file or inline) so each
   agent has its own token resolving to a named identity. Removing an agent's
   line revokes it: the control plane reloads credentials, rejects the token on
