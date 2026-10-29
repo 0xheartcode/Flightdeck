@@ -19,6 +19,8 @@ function config(overrides: Partial<Config> = {}): Config {
     maxServices: 1000,
     actionsEnabled: false,
     actionTimeoutMs: 20_000,
+    auditMax: 500,
+    auditFile: '',
     ...overrides,
   };
 }

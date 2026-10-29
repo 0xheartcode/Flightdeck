@@ -1,8 +1,6 @@
 import { WebSocket } from 'ws';
 import { parseClientMessage, type ActionKind, type ServerMessage } from '@flightdeck/protocol';
-import type { CommandBus } from './commands.js';
-import type { Config } from './config.js';
-import type { Store } from './store.js';
+import type { Context } from './context.js';
 
 /** Max distinct services one browser socket may subscribe to. */
 const MAX_SUBSCRIPTIONS = 50;
@@ -12,14 +10,10 @@ const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
 /**
  * Wire a browser socket into the store: push the live service list, on
  * `subscribe` replay the recent log tail then stream new events, and on
- * `action` dispatch an allowlisted command to the owning agent.
+ * `action` dispatch an allowlisted command to the owning agent (auditing it).
  */
-export function handleClientConnection(
-  ws: WebSocket,
-  store: Store,
-  commands: CommandBus,
-  config: Config,
-): void {
+export function handleClientConnection(ws: WebSocket, ctx: Context, actor: string): void {
+  const { store, commands, config, audit, metrics } = ctx;
   const unsubscribers = new Map<string, () => void>();
 
   const send = (msg: ServerMessage): void => {
@@ -67,17 +61,23 @@ export function handleClientConnection(
   });
 
   async function handleAction(serviceId: string, action: ActionKind): Promise<void> {
+    const finish = (ok: boolean, error?: string): void => {
+      audit.record({ ts: Date.now(), action, serviceId, actor, ok, error });
+      metrics.incAction(action, ok);
+      send({ type: 'action_result', serviceId, action, ok, error });
+    };
+
     if (!config.actionsEnabled) {
-      send({ type: 'action_result', serviceId, action, ok: false, error: 'actions are disabled' });
+      finish(false, 'actions are disabled');
       return;
     }
     const service = store.getService(serviceId);
     if (!service) {
-      send({ type: 'action_result', serviceId, action, ok: false, error: 'unknown service' });
+      finish(false, 'unknown service');
       return;
     }
     const outcome = await commands.dispatch(serviceId, action, service.containerId);
-    send({ type: 'action_result', serviceId, action, ok: outcome.ok, error: outcome.error });
+    finish(outcome.ok, outcome.error);
   }
 
   ws.on('close', () => {
