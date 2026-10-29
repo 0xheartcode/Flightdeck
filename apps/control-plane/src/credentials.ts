@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { safeEqual } from './auth.js';
 import type { Config } from './config.js';
+import { logger } from './logger.js';
+
+const log = logger.child({ component: 'credentials' });
 
 export interface AgentCredential {
   name: string;
@@ -31,9 +34,9 @@ export class CredentialStore {
   reload(): void {
     this.creds = this.parse();
     if (this.creds.length === 0) {
-      console.warn(
-        '[credentials] no agent credentials configured ' +
-          '(FD_AGENT_TOKEN / FD_AGENT_TOKENS / FD_AGENT_TOKENS_FILE); all agents will be rejected.',
+      log.warn(
+        'no agent credentials configured ' +
+          '(FD_AGENT_TOKEN / FD_AGENT_TOKENS / FD_AGENT_TOKENS_FILE); all agents will be rejected',
       );
     }
   }

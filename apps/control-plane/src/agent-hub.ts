@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { parseAgentMessage, type ServerCommand } from '@flightdeck/protocol';
 import type { CommandBus } from './commands.js';
+import { logger } from './logger.js';
 import type { Store } from './store.js';
 
 /**
@@ -17,7 +18,7 @@ export function handleAgentConnection(
   // agent disconnects (a dead host must not linger as a false "running"), and
   // to stop one connection from reporting for services it did not announce.
   const owned = new Set<string>();
-  let label = agentName;
+  const log = logger.child({ component: 'agent', agent: agentName });
   let connHost: string | undefined;
 
   // How to send a command down to this agent (used by the CommandBus).
@@ -32,20 +33,19 @@ export function handleAgentConnection(
     try {
       msg = parseAgentMessage(String(data));
     } catch (err) {
-      console.warn('[agent] dropped invalid message:', (err as Error).message);
+      log.warn({ err: (err as Error).message }, 'dropped invalid message');
       return;
     }
 
     switch (msg.type) {
       case 'hello':
         connHost = msg.hostname;
-        label = `${agentName} (${msg.agentId} @ ${msg.hostname})`;
-        console.log(`[agent] connected: ${label}`);
+        log.info({ agentId: msg.agentId, host: msg.hostname }, 'agent connected');
         break;
       case 'service':
         // A connection may only announce services for its own host.
         if (connHost !== undefined && msg.service.host !== connHost) {
-          console.warn(`[agent] ${label} tried to announce service for host ${msg.service.host}`);
+          log.warn({ claimedHost: msg.service.host }, 'rejected service for a different host');
           break;
         }
         owned.add(msg.service.id);
@@ -77,7 +77,7 @@ export function handleAgentConnection(
   });
 
   ws.on('close', () => {
-    console.log(`[agent] disconnected: ${label}`);
+    log.info('agent disconnected');
     for (const id of owned) {
       store.removeService(id);
       commands.unregisterService(id, sendCommand);

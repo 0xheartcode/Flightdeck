@@ -5,6 +5,9 @@ import type {
   ServiceState,
   Stats,
 } from '@flightdeck/protocol';
+import { logger } from './logger.js';
+
+const log = logger.child({ component: 'store' });
 
 type Listener = (msg: ServerMessage) => void;
 type ServicesListener = (services: ServiceInfo[]) => void;
@@ -43,7 +46,7 @@ export class Store {
   upsertService(service: ServiceInfo): void {
     // Cap registry growth so a misbehaving agent cannot invent unbounded ids.
     if (!this.services.has(service.id) && this.services.size >= this.maxServices) {
-      console.warn(`[store] service cap (${this.maxServices}) reached; dropping ${service.id}`);
+      log.warn({ cap: this.maxServices, dropped: service.id }, 'service cap reached; dropping');
       return;
     }
     this.services.set(service.id, service);
