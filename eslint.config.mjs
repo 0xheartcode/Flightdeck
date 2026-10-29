@@ -30,7 +30,9 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      'no-console': 'warn',
+      // The control plane logs through pino, never console; the browser app
+      // may use console.warn/error (overridden below).
+      'no-console': 'error',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -51,6 +53,10 @@ export default tseslint.config(
       globals: {
         ...globals.browser,
       },
+    },
+    rules: {
+      // The browser app may surface genuine errors/warnings to the console.
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
     // To add React hooks linting later:
     //   pnpm add -D eslint-plugin-react-hooks -w
