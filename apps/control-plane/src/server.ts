@@ -10,6 +10,7 @@ import { authorizeUpgrade } from './authorize.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
 import { AuditLog } from './audit.js';
+import { DeployStore } from './deploys.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
 import { createHttpApp } from './http.js';
@@ -30,12 +31,14 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   const log = logger.child({ component: 'control-plane' });
 
   const credentials = new CredentialStore(config);
+  const deploys = new DeployStore(config.dbFile);
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
     commands: new CommandBus(config.actionTimeoutMs),
     audit: new AuditLog(config.auditMax, config.auditFile || undefined),
     metrics: new Metrics(),
+    deploys,
   };
 
   log.info(
@@ -122,6 +125,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       clearInterval(revocationTimer);
       agentWss.close();
       clientWss.close();
+      deploys.close();
       server.close(() => resolve());
     });
 

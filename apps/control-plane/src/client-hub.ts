@@ -13,7 +13,7 @@ const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
  * `action` dispatch an allowlisted command to the owning agent (auditing it).
  */
 export function handleClientConnection(ws: WebSocket, ctx: Context, actor: string): void {
-  const { store, commands, config, audit, metrics } = ctx;
+  const { store, commands, config, audit, metrics, deploys } = ctx;
   const unsubscribers = new Map<string, () => void>();
 
   const send = (msg: ServerMessage): void => {
@@ -43,6 +43,12 @@ export function handleClientConnection(ws: WebSocket, ctx: Context, actor: strin
         if (unsubscribers.size >= MAX_SUBSCRIPTIONS) return;
         send({ type: 'snapshot', serviceId: msg.serviceId, logs: store.recentLogs(msg.serviceId) });
         unsubscribers.set(msg.serviceId, store.subscribe(msg.serviceId, send));
+        // Push the latest known deploy for this service's repo, if any.
+        const svc = store.getService(msg.serviceId);
+        if (svc?.repo) {
+          const latest = deploys.latestForRepo(svc.repo, svc.environment);
+          if (latest) send({ type: 'deploy', serviceId: msg.serviceId, deploy: latest });
+        }
         return;
       }
       case 'unsubscribe': {

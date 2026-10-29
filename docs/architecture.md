@@ -25,8 +25,10 @@ allowlist is rejected; there is no arbitrary execution.
 ### Control plane (`apps/control-plane/`, TypeScript)
 
 - **HTTP (Hono)**: `GET /api/health`, `GET /api/services`,
-  `GET /api/services/:id` (service + recent log tail), `GET /api/audit` (action
-  trail), and `GET /metrics` (Prometheus, unauthenticated, counts only).
+  `GET /api/services/:id` (service + recent log tail + latest deploy),
+  `GET /api/audit` (action trail), `GET /api/deploys`, `GET /metrics`
+  (Prometheus, unauthenticated, counts only), and `POST /github/webhook`
+  (HMAC-authenticated GitHub Actions ingestion).
 - **WS `/agent`**: token-authenticated. Agents push `service`, `status`,
   `log`, and `service_gone` messages, applied to the store.
 - **WS `/stream`**: browsers connect, receive the live service list, and on
@@ -59,6 +61,19 @@ container stdout/stderr
    -> WS /stream (ServerMessage: snapshot, then log)
    -> web log viewer
 ```
+
+## Deploy correlation
+
+GitHub Actions posts `workflow_run` events to `POST /github/webhook`. The
+control plane verifies the HMAC signature (`FD_GITHUB_WEBHOOK_SECRET`), maps the
+event to a deploy record (repo, sha, branch, status, run URL, actor), and
+persists it in SQLite (`DeployStore`, file via `FD_DB_FILE`, in-memory by
+default). A deploy is correlated to a service by the operator-provided
+`flightdeck.repo` label (and optional `flightdeck.environment`): matching
+services get the deploy pushed to their subscribers, and a browser is sent the
+latest deploy for a service the moment it subscribes. The `DeployStore`
+interface is intentionally small so a Postgres implementation can replace it for
+HA without touching callers.
 
 ## Roadmap
 - **Deploy correlation**: ingest GitHub Actions webhooks and link a workflow

@@ -66,6 +66,12 @@ Mitigations, strongest first:
   structured log, to `/api/audit`, and, if `FD_AUDIT_LOG_FILE` is set, appended
   as JSONL so it survives a restart.
 
+## GitHub webhook
+
+- `POST /github/webhook` is authenticated by the GitHub `X-Hub-Signature-256`
+  HMAC (verified in constant time against `FD_GITHUB_WEBHOOK_SECRET`), not the
+  dashboard token. The endpoint is disabled (404) when no secret is set.
+
 ## Metrics
 
 - Prometheus metrics are served at `/metrics` without authentication. They

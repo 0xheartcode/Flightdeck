@@ -6,6 +6,7 @@
 export class Metrics {
   private logLines = 0;
   private readonly actions = new Map<string, number>();
+  private readonly deploys = new Map<string, number>();
 
   incLogLines(n = 1): void {
     this.logLines += n;
@@ -14,6 +15,10 @@ export class Metrics {
   incAction(action: string, ok: boolean): void {
     const key = `${action}:${ok ? 'ok' : 'error'}`;
     this.actions.set(key, (this.actions.get(key) ?? 0) + 1);
+  }
+
+  incDeploy(status: string): void {
+    this.deploys.set(status, (this.deploys.get(status) ?? 0) + 1);
   }
 
   render(gauges: { agents: number; services: number }): string {
@@ -33,6 +38,11 @@ export class Metrics {
     for (const [key, value] of this.actions) {
       const [action, outcome] = key.split(':');
       lines.push(`flightdeck_actions_total{action="${action}",outcome="${outcome}"} ${value}`);
+    }
+    lines.push('# HELP flightdeck_deploys_total Deployments observed from CI');
+    lines.push('# TYPE flightdeck_deploys_total counter');
+    for (const [status, value] of this.deploys) {
+      lines.push(`flightdeck_deploys_total{status="${status}"} ${value}`);
     }
     return lines.join('\n') + '\n';
   }

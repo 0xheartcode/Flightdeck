@@ -21,6 +21,8 @@ function config(overrides: Partial<Config> = {}): Config {
     actionTimeoutMs: 20_000,
     auditMax: 500,
     auditFile: '',
+    dbFile: ':memory:',
+    githubWebhookSecret: '',
     ...overrides,
   };
 }

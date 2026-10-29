@@ -97,6 +97,11 @@ export class Store {
     this.fanout(stats.serviceId, { type: 'stats', stats });
   }
 
+  /** Push an arbitrary message to a service's subscribers (e.g. deploys). */
+  pushToService(serviceId: string, msg: ServerMessage): void {
+    this.fanout(serviceId, msg);
+  }
+
   /** Subscribe to live events (logs, status, stats) for one service. */
   subscribe(serviceId: string, listener: Listener): () => void {
     const set = this.serviceListeners.get(serviceId) ?? new Set<Listener>();

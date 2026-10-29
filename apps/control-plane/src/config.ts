@@ -29,6 +29,10 @@ export interface Config {
   auditMax: number;
   /** Optional path to append the audit trail as JSONL (survives restart). */
   auditFile: string;
+  /** SQLite database file for deploys; ':memory:' (default) is ephemeral. */
+  dbFile: string;
+  /** GitHub webhook HMAC secret; empty disables the webhook endpoint. */
+  githubWebhookSecret: string;
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -79,6 +83,8 @@ export function loadConfig(): Config {
     actionTimeoutMs: num(process.env.FD_ACTION_TIMEOUT_MS, 20_000),
     auditMax: num(process.env.FD_AUDIT_MAX, 500),
     auditFile: process.env.FD_AUDIT_LOG_FILE ?? '',
+    dbFile: process.env.FD_DB_FILE ?? ':memory:',
+    githubWebhookSecret: process.env.FD_GITHUB_WEBHOOK_SECRET ?? '',
   };
 
   // Agent-credential presence is validated by the CredentialStore, which

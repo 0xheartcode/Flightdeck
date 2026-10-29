@@ -20,6 +20,8 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     actionTimeoutMs: 2000,
     auditMax: 50,
     auditFile: '',
+    dbFile: ':memory:',
+    githubWebhookSecret: '',
     ...overrides,
   };
 }
