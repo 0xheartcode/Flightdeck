@@ -11,6 +11,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Restart action: restart a container from the UI. The control plane routes an
   allowlisted command to the agent that owns the service and reports the
   result. Off by default; enable with `FD_ENABLE_ACTIONS=true`.
+- Redeploy action: re-pull the service's image and recreate the container with
+  the same configuration. The old container is renamed aside and restored if
+  the new one fails to start. Same allowlist and opt-in gate as restart.
 
 - Agent now collects and streams CPU and memory usage per container, shown in
   the log view header.
