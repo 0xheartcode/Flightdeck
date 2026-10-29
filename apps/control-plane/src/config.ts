@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { logger } from './logger.js';
 
 export interface Config {
   host: string;
@@ -76,19 +77,20 @@ export function loadConfig(): Config {
 
   // Agent-credential presence is validated by the CredentialStore, which
   // warns when none are configured (FD_AGENT_TOKEN / FD_AGENT_TOKENS[_FILE]).
+  const log = logger.child({ component: 'config' });
   if (!config.dashboardToken) {
-    console.warn(
-      '[config] FD_DASHBOARD_TOKEN is empty; the browser API and log stream are UNAUTHENTICATED. ' +
+    log.warn(
+      'FD_DASHBOARD_TOKEN is empty; the browser API and log stream are UNAUTHENTICATED. ' +
         'Set it, or keep the control plane on a trusted network only.',
     );
   }
   if (config.corsOrigin === '*') {
-    console.warn('[config] FD_CORS_ORIGIN is "*"; any website can call the API from a browser.');
+    log.warn('FD_CORS_ORIGIN is "*"; any website can call the API from a browser.');
   }
   if (config.actionsEnabled && !config.dashboardToken) {
-    console.warn(
-      '[config] FD_ENABLE_ACTIONS is on without FD_DASHBOARD_TOKEN; anyone who can reach ' +
-        'the stream can restart containers. Set a dashboard token or restrict the network.',
+    log.warn(
+      'FD_ENABLE_ACTIONS is on without FD_DASHBOARD_TOKEN; anyone who can reach the stream ' +
+        'can restart or redeploy containers. Set a dashboard token or restrict the network.',
     );
   }
 

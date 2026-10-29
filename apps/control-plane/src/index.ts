@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import { serve } from '@hono/node-server';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { loadConfig } from './config.js';
+import { logger } from './logger.js';
 import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
 import { CredentialStore } from './credentials.js';
@@ -17,9 +18,12 @@ const store = new Store(config.logBufferSize, config.maxServices);
 const credentials = new CredentialStore(config);
 const commands = new CommandBus(config.actionTimeoutMs);
 const app = createHttpApp(store, config);
+const log = logger.child({ component: 'control-plane' });
 
-console.log(`[flightdeck] ${credentials.size} agent credential(s) loaded`);
-console.log(`[flightdeck] actions ${config.actionsEnabled ? 'enabled' : 'disabled'}`);
+log.info(
+  { credentials: credentials.size, actions: config.actionsEnabled },
+  'control plane starting',
+);
 
 // Two WebSocket endpoints share the HTTP server:
 //   /agent   - authenticated, agents push logs/status/stats
@@ -34,9 +38,7 @@ const liveAgents = new Map<WebSocket, string>();
 clientWss.on('connection', (ws) => handleClientConnection(ws, store, commands, config));
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
-  console.log(`[flightdeck] control plane listening on ${config.host}:${info.port}`);
-  console.log(`[flightdeck]   agents  -> ws://${config.host}:${info.port}/agent`);
-  console.log(`[flightdeck]   browser -> ws://${config.host}:${info.port}/stream`);
+  log.info({ host: config.host, port: info.port }, 'listening (agents: /agent, browser: /stream)');
 });
 
 server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -79,7 +81,7 @@ const revocationTimer = setInterval(() => {
   credentials.reload();
   for (const [ws, token] of liveAgents) {
     if (credentials.verify(token) === null) {
-      console.warn('[agent] credential revoked; closing connection');
+      log.warn('agent credential revoked; closing connection');
       ws.close(1008, 'credential revoked');
     }
   }
@@ -94,7 +96,7 @@ function reject(socket: Duplex, code: number): void {
 }
 
 function shutdown(signal: string): void {
-  console.log(`[flightdeck] ${signal} received, shutting down`);
+  log.info({ signal }, 'shutting down');
   agentWss.close();
   clientWss.close();
   server.close(() => process.exit(0));
