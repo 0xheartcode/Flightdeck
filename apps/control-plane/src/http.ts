@@ -88,7 +88,7 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono {
 }
 
 /** Store a deploy and push it to the subscribers of every matching service. */
-export function correlateDeploy(ctx: Context, deploy: DeployRecord): void {
+function correlateDeploy(ctx: Context, deploy: DeployRecord): void {
   ctx.deploys.record(deploy);
   ctx.metrics.incDeploy(deploy.status);
   let matched = 0;

@@ -55,6 +55,39 @@ async function waitFor<T>(fn: () => T | undefined, timeout = 3000): Promise<T> {
 }
 
 const v = PROTOCOL_VERSION;
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+async function connectAgent(port: number, hostname: string): Promise<WebSocket> {
+  const agent = new WebSocket(`ws://127.0.0.1:${port}/agent`, {
+    headers: { Authorization: 'Bearer test-token' },
+  });
+  await open(agent);
+  agent.send(JSON.stringify({ v, type: 'hello', agentId: 'a', hostname }));
+  return agent;
+}
+
+function serviceMsg(id: string, host: string): string {
+  return JSON.stringify({
+    v,
+    type: 'service',
+    service: {
+      id,
+      name: id,
+      image: 'img',
+      containerId: 'c',
+      state: 'running',
+      host,
+      createdAt: 0,
+    },
+  });
+}
+
+async function serviceIds(port: number): Promise<string[]> {
+  const d = (await (await fetch(`http://127.0.0.1:${port}/api/services`)).json()) as {
+    services: Array<{ id: string }>;
+  };
+  return d.services.map((s) => s.id);
+}
 
 describe('control plane integration', () => {
   let cp: ControlPlaneHandle | undefined;
@@ -146,5 +179,63 @@ describe('control plane integration', () => {
       headers: { Authorization: 'Bearer wrong' },
     });
     await expect(open(agent)).rejects.toBeTruthy();
+  });
+
+  it('rejects a service announced for a host other than the agent connected as', async () => {
+    cp = startControlPlane(testConfig());
+    const port = await cp.listening;
+    const agent = await connectAgent(port, 'host-a');
+    agent.send(serviceMsg('spoof', 'host-b')); // host mismatch -> dropped
+    agent.send(serviceMsg('legit', 'host-a')); // own host -> accepted
+
+    let ids: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      ids = await serviceIds(port);
+      if (ids.includes('legit')) break;
+      await sleep(30);
+    }
+    expect(ids).toContain('legit');
+    expect(ids).not.toContain('spoof');
+    agent.close();
+  });
+
+  it('reports actions disabled when FD_ENABLE_ACTIONS is off', async () => {
+    cp = startControlPlane(testConfig({ actionsEnabled: false }));
+    const port = await cp.listening;
+    const agent = await connectAgent(port, 'host-a');
+    agent.send(serviceMsg('svc', 'host-a'));
+
+    const browser = new WebSocket(`ws://127.0.0.1:${port}/stream`);
+    const browserMsgs = collect(browser);
+    await open(browser);
+    browser.send(JSON.stringify({ type: 'subscribe', serviceId: 'svc' }));
+    await sleep(100);
+    browser.send(JSON.stringify({ type: 'action', action: 'restart', serviceId: 'svc' }));
+
+    const res = await waitFor(() => browserMsgs.find((m) => m.type === 'action_result'));
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('actions are disabled');
+    agent.close();
+    browser.close();
+  });
+
+  it('rate limits browser actions', async () => {
+    cp = startControlPlane(testConfig({ actionRatePerMin: 1 }));
+    const port = await cp.listening;
+    const browser = new WebSocket(`ws://127.0.0.1:${port}/stream`);
+    const browserMsgs = collect(browser);
+    await open(browser);
+    // No such service: first action is "unknown service", second is rate limited.
+    browser.send(JSON.stringify({ type: 'action', action: 'restart', serviceId: 'nope' }));
+    browser.send(JSON.stringify({ type: 'action', action: 'restart', serviceId: 'nope' }));
+
+    await waitFor(() =>
+      browserMsgs.filter((m) => m.type === 'action_result').length >= 2 ? true : undefined,
+    );
+    const errors = browserMsgs
+      .filter((m) => m.type === 'action_result')
+      .map((m) => m.error as string);
+    expect(errors).toContain('rate limited');
+    browser.close();
   });
 });
