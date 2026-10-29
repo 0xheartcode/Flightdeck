@@ -20,6 +20,10 @@ export interface Config {
   maxPayloadBytes: number;
   /** Cap on the number of distinct services held in the registry. */
   maxServices: number;
+  /** Whether operator actions (restart) are allowed. Off by default. */
+  actionsEnabled: boolean;
+  /** How long to wait for an agent to report a command result. */
+  actionTimeoutMs: number;
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -66,6 +70,8 @@ export function loadConfig(): Config {
     logBufferSize: num(process.env.FD_LOG_BUFFER_SIZE, 2000),
     maxPayloadBytes: num(process.env.FD_MAX_PAYLOAD_BYTES, 262_144),
     maxServices: num(process.env.FD_MAX_SERVICES, 1000),
+    actionsEnabled: process.env.FD_ENABLE_ACTIONS === 'true',
+    actionTimeoutMs: num(process.env.FD_ACTION_TIMEOUT_MS, 20_000),
   };
 
   // Agent-credential presence is validated by the CredentialStore, which
@@ -78,6 +84,12 @@ export function loadConfig(): Config {
   }
   if (config.corsOrigin === '*') {
     console.warn('[config] FD_CORS_ORIGIN is "*"; any website can call the API from a browser.');
+  }
+  if (config.actionsEnabled && !config.dashboardToken) {
+    console.warn(
+      '[config] FD_ENABLE_ACTIONS is on without FD_DASHBOARD_TOKEN; anyone who can reach ' +
+        'the stream can restart containers. Set a dashboard token or restrict the network.',
+    );
   }
 
   return config;

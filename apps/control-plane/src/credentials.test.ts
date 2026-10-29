@@ -17,6 +17,8 @@ function config(overrides: Partial<Config> = {}): Config {
     logBufferSize: 2000,
     maxPayloadBytes: 262_144,
     maxServices: 1000,
+    actionsEnabled: false,
+    actionTimeoutMs: 20_000,
     ...overrides,
   };
 }

@@ -6,6 +6,7 @@ import { loadConfig } from './config.js';
 import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
 import { CredentialStore } from './credentials.js';
+import { CommandBus } from './commands.js';
 import { Store } from './store.js';
 import { createHttpApp } from './http.js';
 import { handleAgentConnection } from './agent-hub.js';
@@ -14,9 +15,11 @@ import { handleClientConnection } from './client-hub.js';
 const config = loadConfig();
 const store = new Store(config.logBufferSize, config.maxServices);
 const credentials = new CredentialStore(config);
+const commands = new CommandBus(config.actionTimeoutMs);
 const app = createHttpApp(store, config);
 
 console.log(`[flightdeck] ${credentials.size} agent credential(s) loaded`);
+console.log(`[flightdeck] actions ${config.actionsEnabled ? 'enabled' : 'disabled'}`);
 
 // Two WebSocket endpoints share the HTTP server:
 //   /agent   - authenticated, agents push logs/status/stats
@@ -28,7 +31,7 @@ const clientWss = new WebSocketServer({ noServer: true, maxPayload: config.maxPa
 // is revoked (removed from the file) can have its connection dropped.
 const liveAgents = new Map<WebSocket, string>();
 
-clientWss.on('connection', (ws) => handleClientConnection(ws, store));
+clientWss.on('connection', (ws) => handleClientConnection(ws, store, commands, config));
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   console.log(`[flightdeck] control plane listening on ${config.host}:${info.port}`);
@@ -61,7 +64,7 @@ server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     agentWss.handleUpgrade(req, socket, head, (ws) => {
       liveAgents.set(ws, headerToken ?? '');
       ws.on('close', () => liveAgents.delete(ws));
-      handleAgentConnection(ws, store, agentName);
+      handleAgentConnection(ws, store, commands, agentName);
     });
     return;
   }

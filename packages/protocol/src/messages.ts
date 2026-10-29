@@ -108,6 +108,14 @@ export const AgentStats = z.object({
   stats: Stats,
 });
 
+export const AgentCommandResult = z.object({
+  ...base,
+  type: z.literal('command_result'),
+  id: z.string().max(128),
+  ok: z.boolean(),
+  error: z.string().max(1024).optional(),
+});
+
 export const AgentMessage = z.discriminatedUnion('type', [
   AgentHello,
   AgentService,
@@ -115,8 +123,25 @@ export const AgentMessage = z.discriminatedUnion('type', [
   AgentStatus,
   AgentLog,
   AgentStats,
+  AgentCommandResult,
 ]);
 export type AgentMessage = z.infer<typeof AgentMessage>;
+
+// --- Control plane -> agent (commands) -------------------------------------
+
+/** Actions an operator can trigger. Allowlisted: no arbitrary execution. */
+export const ActionKind = z.enum(['restart']);
+export type ActionKind = z.infer<typeof ActionKind>;
+
+export const ServerCommand = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  type: z.literal('command'),
+  id: z.string().max(128),
+  action: ActionKind,
+  serviceId: z.string().max(256),
+  containerId: z.string().max(128),
+});
+export type ServerCommand = z.infer<typeof ServerCommand>;
 
 // --- Browser -> control plane ----------------------------------------------
 
@@ -130,7 +155,17 @@ export const ClientUnsubscribe = z.object({
   serviceId: z.string(),
 });
 
-export const ClientMessage = z.discriminatedUnion('type', [ClientSubscribe, ClientUnsubscribe]);
+export const ClientAction = z.object({
+  type: z.literal('action'),
+  action: ActionKind,
+  serviceId: z.string().min(1).max(256),
+});
+
+export const ClientMessage = z.discriminatedUnion('type', [
+  ClientSubscribe,
+  ClientUnsubscribe,
+  ClientAction,
+]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
 // --- Control plane -> browser ----------------------------------------------
@@ -164,12 +199,21 @@ export const ServerStats = z.object({
   stats: Stats,
 });
 
+export const ServerActionResult = z.object({
+  type: z.literal('action_result'),
+  serviceId: z.string(),
+  action: ActionKind,
+  ok: z.boolean(),
+  error: z.string().optional(),
+});
+
 export const ServerMessage = z.discriminatedUnion('type', [
   ServerServices,
   ServerSnapshot,
   ServerLog,
   ServerStatus,
   ServerStats,
+  ServerActionResult,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 

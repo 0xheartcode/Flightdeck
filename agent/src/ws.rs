@@ -5,14 +5,14 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::interval;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::http::Uri;
 
-use crate::protocol::AgentMessage;
+use crate::protocol::{AgentMessage, IncomingCommand};
 
 const HEARTBEAT_SECS: u64 = 30;
 
@@ -22,6 +22,7 @@ pub async fn run(
     agent_id: String,
     hostname: String,
     mut rx: Receiver<AgentMessage>,
+    cmd_tx: Sender<IncomingCommand>,
 ) {
     let mut attempt: u32 = 0;
     loop {
@@ -66,6 +67,12 @@ pub async fn run(
                         incoming = ws.next() => match incoming {
                             Some(Ok(Message::Ping(payload))) => {
                                 let _ = ws.send(Message::Pong(payload)).await;
+                            }
+                            Some(Ok(Message::Text(text))) => {
+                                // Relay commands to main, which holds the Docker handle.
+                                if let Ok(cmd) = serde_json::from_str::<IncomingCommand>(text.as_str()) {
+                                    let _ = cmd_tx.try_send(cmd);
+                                }
                             }
                             Some(Ok(Message::Close(_))) | None => break,
                             Some(Err(err)) => {

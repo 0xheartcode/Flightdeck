@@ -230,6 +230,12 @@ pub fn unique_service_id(host: &str, logical: &str, container_id: &str, duplicat
     }
 }
 
+/// Restart a container by id. Uses the daemon's default stop timeout.
+pub async fn restart(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
+    docker.restart_container(container_id, None).await?;
+    Ok(())
+}
+
 fn state_to_str(state: &ContainerSummaryStateEnum) -> &'static str {
     use ContainerSummaryStateEnum::*;
     match state {

@@ -50,6 +50,17 @@ Mitigations, strongest first:
   `/stream` WebSocket upgrade validates the `Origin` header against it, since
   WebSockets otherwise bypass CORS entirely.
 
+## Operator actions
+
+- Actions that change a container (currently `restart`) are **off by default**
+  and only enabled with `FD_ENABLE_ACTIONS=true`. The agent executes an
+  allowlist of actions and rejects anything else, so there is no arbitrary
+  command execution through the agent.
+- When actions are enabled, set `FD_DASHBOARD_TOKEN` so only authenticated
+  browsers can trigger them (the control plane warns if actions are on without
+  a dashboard token). An action is routed only to the agent that owns the
+  target service.
+
 ## Denial of service
 
 - Both WebSocket servers cap frame size (`FD_MAX_PAYLOAD_BYTES`), the service

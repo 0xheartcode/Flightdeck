@@ -13,6 +13,8 @@ const base: Config = {
   logBufferSize: 2000,
   maxPayloadBytes: 262_144,
   maxServices: 1000,
+  actionsEnabled: false,
+  actionTimeoutMs: 20_000,
 };
 
 // Resolves the one known token to the agent name "edge-1".
