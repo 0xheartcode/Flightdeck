@@ -24,6 +24,11 @@ check-rust:
     cargo clippy --all-targets --all-features -- -D warnings
     cargo test --all
 
+# Supply-chain audit (advisories, licenses, bans, sources). Needs cargo-deny.
+# Kept separate from `check` so the local gate stays fast; CI runs both.
+audit:
+    cargo deny --all-features check
+
 # ---------------------------------------------------------------------------
 # Development
 # ---------------------------------------------------------------------------
