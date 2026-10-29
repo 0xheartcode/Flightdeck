@@ -1,21 +1,40 @@
 import { useEffect, useRef } from 'react';
 import type { LogLine, Stats } from '@flightdeck/protocol';
-import type { LiveStatus } from '@/hooks/useLogStream';
+import type { ActionResult, LiveStatus } from '@/hooks/useLogStream';
 import { cx, formatBytes, formatTime } from '@/lib/format';
 
 interface Props {
+  serviceName: string;
   logs: LogLine[];
   connected: boolean;
   stats: Stats | null;
   status: LiveStatus | null;
+  actionResult: ActionResult | null;
+  actionPending: boolean;
+  onRestart: () => void;
 }
 
-export function LogViewer({ logs, connected, stats, status }: Props) {
+export function LogViewer({
+  serviceName,
+  logs,
+  connected,
+  stats,
+  status,
+  actionResult,
+  actionPending,
+  onRestart,
+}: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  const handleRestart = (): void => {
+    if (window.confirm(`Restart ${serviceName}?`)) {
+      onRestart();
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -37,7 +56,22 @@ export function LogViewer({ logs, connected, stats, status }: Props) {
             exit {status.exitCode}
           </span>
         )}
-        <span className="ml-auto tabular-nums">{logs.length} lines</span>
+        {actionResult && (
+          <span className={actionResult.ok ? 'text-emerald-400' : 'text-rose-400'}>
+            {actionResult.ok ? 'restarted' : `restart failed: ${actionResult.error ?? 'error'}`}
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleRestart}
+            disabled={actionPending}
+            className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {actionPending ? 'restarting...' : 'Restart'}
+          </button>
+          <span className="tabular-nums">{logs.length} lines</span>
+        </span>
       </div>
       <div className="flex-1 overflow-auto bg-[#07090d] p-4 font-mono text-xs leading-relaxed">
         {logs.length === 0 ? (

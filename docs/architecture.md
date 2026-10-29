@@ -17,8 +17,9 @@ One static binary per server. Responsibilities:
 4. Maintain one WebSocket connection to the control plane, sending a `hello`
    on connect and reconnecting with backoff on drop.
 
-The agent only reads today. Command execution (restart, redeploy) is a planned
-addition and will be strictly allowlisted.
+The agent also executes allowlisted commands sent by the control plane
+(currently `restart`), reporting the result. Anything not on the allowlist is
+rejected; there is no arbitrary execution.
 
 ### Control plane (`apps/control-plane/`, TypeScript)
 
@@ -27,7 +28,10 @@ addition and will be strictly allowlisted.
 - **WS `/agent`**: token-authenticated. Agents push `service`, `status`,
   `log`, and `service_gone` messages, applied to the store.
 - **WS `/stream`**: browsers connect, receive the live service list, and on
-  `subscribe` get a snapshot of the recent tail then a live stream.
+  `subscribe` get a snapshot of the recent tail then a live stream. An `action`
+  message (e.g. restart) is routed to the agent owning that service, and the
+  result is returned to the requesting browser. Actions are off unless
+  `FD_ENABLE_ACTIONS=true`.
 - **Store**: in-memory service registry plus a bounded ring buffer of recent
   logs per service (`FD_LOG_BUFFER_SIZE`). Deliberately not durable; long-term
   log storage is a later concern (ship to Loki).
@@ -56,8 +60,8 @@ container stdout/stderr
 
 ## Roadmap
 
-- **Actions**: restart and redeploy, sent control-plane -> agent over the
-  existing socket, strictly allowlisted (no arbitrary exec).
+- **Redeploy action**: pull a new image tag and recreate the container,
+  alongside the existing restart action.
 - **Deploy correlation**: ingest GitHub Actions webhooks and link a workflow
   run / image tag to the service it deployed, producing a deploy timeline.
 - **Env surfacing**: show the env var names a container runs with, values

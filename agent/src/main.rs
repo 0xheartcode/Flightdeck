@@ -10,9 +10,12 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 
+use bollard::Docker;
+use tokio::sync::mpsc::Sender;
+
 use crate::config::Config;
 use crate::docker::now_ms;
-use crate::protocol::{AgentMessage, ServiceInfo};
+use crate::protocol::{AgentMessage, IncomingCommand, ServiceInfo};
 
 /// Bounded outbound queue. If the control plane is down and a container is
 /// chatty, we drop new messages rather than grow memory without bound.
@@ -37,6 +40,8 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let (tx, rx) = mpsc::channel::<AgentMessage>(CHANNEL_CAPACITY);
+    // Commands flow control-plane -> ws task -> here, where the Docker handle lives.
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<IncomingCommand>(64);
     let agent_id = format!("{}-{}", config.hostname, std::process::id());
     let ws_handle = tokio::spawn(ws::run(
         config.control_plane_url.clone(),
@@ -44,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         agent_id,
         config.hostname.clone(),
         rx,
+        cmd_tx,
     ));
 
     // container_id -> running log + stats tasks
@@ -62,6 +68,11 @@ async fn main() -> anyhow::Result<()> {
             _ = wait_terminate() => {
                 tracing::info!("SIGTERM received, shutting down");
                 break;
+            }
+            Some(cmd) = cmd_rx.recv() => {
+                // Execute in the background so a slow restart does not stall
+                // discovery or log forwarding.
+                tokio::spawn(execute_command(docker.clone(), cmd, tx.clone()));
             }
             _ = tick.tick() => {
                 // Reap containers whose tasks all finished (stopped container).
@@ -157,6 +168,30 @@ async fn main() -> anyhow::Result<()> {
     drop(tx);
     ws_handle.abort();
     Ok(())
+}
+
+/// Execute an allowlisted command from the control plane and report the result.
+async fn execute_command(docker: Docker, cmd: IncomingCommand, tx: Sender<AgentMessage>) {
+    if cmd.kind != "command" {
+        return;
+    }
+    let outcome = match cmd.action.as_str() {
+        "restart" => docker::restart(&docker, &cmd.container_id)
+            .await
+            .map_err(|e| e.to_string()),
+        other => Err(format!("unsupported action: {other}")),
+    };
+    let (ok, error) = match outcome {
+        Ok(()) => {
+            tracing::info!(action = %cmd.action, container = %cmd.container_id, "command ok");
+            (true, None)
+        }
+        Err(err) => {
+            tracing::warn!(action = %cmd.action, error = %err, "command failed");
+            (false, Some(err))
+        }
+    };
+    let _ = tx.try_send(AgentMessage::command_result(cmd.id, ok, error));
 }
 
 /// Resolve when the process receives SIGTERM (container orchestrators send it

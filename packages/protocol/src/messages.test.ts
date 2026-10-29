@@ -57,4 +57,24 @@ describe('protocol', () => {
     const msg = parseClientMessage(JSON.stringify({ type: 'subscribe', serviceId: 'api' }));
     expect(msg.type).toBe('subscribe');
   });
+
+  it('parses a client restart action and rejects unknown actions', () => {
+    const msg = parseClientMessage(
+      JSON.stringify({ type: 'action', action: 'restart', serviceId: 'api' }),
+    );
+    expect(msg.type).toBe('action');
+    expect(() =>
+      parseClientMessage(JSON.stringify({ type: 'action', action: 'nuke', serviceId: 'api' })),
+    ).toThrow();
+  });
+
+  it('parses an agent command_result', () => {
+    const msg = parseAgentMessage(
+      JSON.stringify({ v: PROTOCOL_VERSION, type: 'command_result', id: 'c1', ok: true }),
+    );
+    expect(msg.type).toBe('command_result');
+    if (msg.type === 'command_result') {
+      expect(msg.ok).toBe(true);
+    }
+  });
 });
