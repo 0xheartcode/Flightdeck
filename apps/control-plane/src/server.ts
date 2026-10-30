@@ -7,6 +7,7 @@ import type { Context } from './context.js';
 import { logger } from './logger.js';
 import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
+import { logIdentityConfig, verifyToken } from './identity.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
 import { AuditLog } from './audit.js';
@@ -50,6 +51,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     { credentials: credentials.size, actions: config.actionsEnabled },
     'control plane starting',
   );
+  logIdentityConfig(config);
 
   const agentWss = new WebSocketServer({ noServer: true, maxPayload: config.maxPayloadBytes });
   const clientWss = new WebSocketServer({ noServer: true, maxPayload: config.maxPayloadBytes });
@@ -72,11 +74,6 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   };
 
   const app = createHttpApp(ctx, () => liveAgents.size);
-
-  clientWss.on('connection', (ws, req: IncomingMessage) => {
-    track(ws);
-    handleClientConnection(ws, ctx, req.socket.remoteAddress ?? 'unknown');
-  });
 
   let resolvePort!: (port: number) => void;
   const listening = new Promise<number>((resolve) => {
@@ -104,6 +101,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       },
       config,
       (token) => credentials.verify(token),
+      (token) => verifyToken(token, config),
     );
 
     if (!decision.ok) {
@@ -128,7 +126,10 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       return;
     }
 
-    clientWss.handleUpgrade(req, socket, head, (ws) => clientWss.emit('connection', ws, req));
+    clientWss.handleUpgrade(req, socket, head, (ws) => {
+      track(ws);
+      handleClientConnection(ws, ctx, req.socket.remoteAddress ?? 'unknown', decision.principal);
+    });
   });
 
   // Reload credentials periodically and drop agents whose credential was removed.

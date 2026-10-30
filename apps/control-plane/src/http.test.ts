@@ -3,11 +3,27 @@ import { describe, expect, it } from 'vitest';
 import { AuditLog } from './audit.js';
 import { CommandBus } from './commands.js';
 import type { Config } from './config.js';
+import { mintHs256 } from './config.testutil.js';
 import type { Context } from './context.js';
 import { DeployStore } from './deploys.js';
 import { createHttpApp } from './http.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
+
+const SECRET = 'http-test-secret';
+const future = Math.floor(Date.now() / 1000) + 3600;
+
+function putService(ctx: Context, id: string): void {
+  ctx.store.upsertService({
+    id,
+    name: id,
+    image: 'img',
+    containerId: 'cid',
+    state: 'running',
+    host: 'h',
+    createdAt: 0,
+  });
+}
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -29,6 +45,13 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     githubWebhookSecret: '',
     maxConnections: 1000,
     actionRatePerMin: 30,
+    oidcIssuer: '',
+    oidcAudience: '',
+    oidcHs256Secret: '',
+    oidcRs256PublicKey: '',
+    oidcRolesClaim: 'roles',
+    operatorRoles: [],
+    adminRoles: [],
     ...overrides,
   };
 }
@@ -126,5 +149,55 @@ describe('http api', () => {
       body: payload,
     });
     expect(bad.status).toBe(401);
+  });
+
+  it('reports legacy full permissions at /api/me when identity is off', async () => {
+    const app = createHttpApp(makeContext(), () => 0);
+    const res = await app.request('/api/me');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { identityEnabled: boolean; permissions: string[] };
+    expect(body.identityEnabled).toBe(false);
+    expect(body.permissions).toContain('act');
+    expect(body.permissions).toContain('reveal');
+  });
+
+  it('requires a valid JWT on the API when identity is on', async () => {
+    const ctx = makeContext(makeConfig({ oidcHs256Secret: SECRET }));
+    const app = createHttpApp(ctx, () => 0);
+
+    expect((await app.request('/api/me')).status).toBe(401);
+    expect(
+      (await app.request('/api/me', { headers: { Authorization: 'Bearer nope.nope.nope' } }))
+        .status,
+    ).toBe(401);
+
+    const token = mintHs256({ sub: 'u1', name: 'Ada', roles: ['operator'], exp: future }, SECRET);
+    const ok = await app.request('/api/me', { headers: { Authorization: `Bearer ${token}` } });
+    expect(ok.status).toBe(200);
+    const me = (await ok.json()) as { subject: string; name: string; permissions: string[] };
+    expect(me).toMatchObject({ subject: 'u1', name: 'Ada' });
+    expect(me.permissions).toContain('act');
+  });
+
+  it('masks env values by default and reveals them only for an admin', async () => {
+    const ctx = makeContext(
+      makeConfig({ oidcHs256Secret: SECRET, operatorRoles: ['operator'], adminRoles: ['admin'] }),
+    );
+    putService(ctx, 'svc');
+    ctx.store.setEnv('svc', [{ key: 'DATABASE_URL', value: 'postgres://secret' }]);
+    const app = createHttpApp(ctx, () => 0);
+
+    const operator = mintHs256({ sub: 'op', roles: ['operator'], exp: future }, SECRET);
+    const admin = mintHs256({ sub: 'ad', roles: ['admin'], exp: future }, SECRET);
+    const read = async (token: string): Promise<{ env: Array<{ key: string; value: string }> }> =>
+      (await (
+        await app.request('/api/services/svc', { headers: { Authorization: `Bearer ${token}` } })
+      ).json()) as { env: Array<{ key: string; value: string }> };
+
+    const masked = await read(operator);
+    expect(masked.env[0]).toEqual({ key: 'DATABASE_URL', value: '********' });
+
+    const revealed = await read(admin);
+    expect(revealed.env[0]).toEqual({ key: 'DATABASE_URL', value: 'postgres://secret' });
   });
 });

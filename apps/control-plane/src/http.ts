@@ -1,20 +1,45 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { DeployRecord } from '@flightdeck/protocol';
+import type { DeployRecord, EnvVar } from '@flightdeck/protocol';
 import { bearer, tokenOk } from './auth.js';
 import type { Context } from './context.js';
 import { deployFromWorkflowRun, verifySignature } from './github.js';
+import {
+  identityEnabled,
+  legacyPermissions,
+  permissionsFor,
+  verifyToken,
+  type Permission,
+  type Principal,
+} from './identity.js';
 import { logger } from './logger.js';
 
 const log = logger.child({ component: 'http' });
+
+/** Resolved caller identity and permissions for one request. */
+interface AuthState {
+  principal?: Principal;
+  perms: Set<Permission>;
+}
+
+type AppEnv = { Variables: { auth: AuthState } };
+
+/** Fixed placeholder shown in place of a secret env value. Hides the length too. */
+const ENV_MASK = '********';
+
+/** Replace every env value with the mask, keeping the keys visible. */
+function maskEnv(env: EnvVar[]): EnvVar[] {
+  return env.map((e) => ({ key: e.key, value: ENV_MASK }));
+}
 
 /**
  * REST surface for the web UI, the GitHub webhook, and a Prometheus metrics
  * endpoint. Live log streaming is over WebSocket, not here.
  */
-export function createHttpApp(ctx: Context, agentCount: () => number): Hono {
+export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppEnv> {
   const { config, store, audit, metrics, deploys } = ctx;
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
+  const idEnabled = identityEnabled(config);
 
   // Metrics are unauthenticated (counts only, no secrets) and outside /api so
   // the CORS and dashboard-token middleware below do not apply.
@@ -45,17 +70,42 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono {
 
   app.use('/api/*', cors({ origin: config.corsOrigin }));
 
-  if (config.dashboardToken) {
-    app.use('/api/*', async (c, next) => {
-      if (c.req.method === 'OPTIONS') return next();
-      if (!tokenOk(config.dashboardToken, bearer(c.req.header('authorization')))) {
+  // Authenticate every /api request and resolve its permissions. With identity
+  // on, a valid JWT is required; otherwise the legacy dashboard token applies
+  // (and when neither is set, the API is open and the caller holds all perms).
+  app.use('/api/*', async (c, next) => {
+    if (c.req.method === 'OPTIONS') return next();
+    const token = bearer(c.req.header('authorization'));
+    if (idEnabled) {
+      const principal = verifyToken(token, config);
+      if (!principal) return c.json({ error: 'unauthorized' }, 401);
+      c.set('auth', {
+        principal,
+        perms: permissionsFor(principal, config.operatorRoles, config.adminRoles),
+      });
+    } else {
+      if (config.dashboardToken && !tokenOk(config.dashboardToken, token)) {
         return c.json({ error: 'unauthorized' }, 401);
       }
-      return next();
-    });
-  }
+      c.set('auth', { perms: legacyPermissions() });
+    }
+    return next();
+  });
 
   app.get('/api/health', (c) => c.json({ ok: true, version: '0.1.0' }));
+
+  // Who the caller is and what they may do, so the UI can show the user and
+  // enable or hide the controls their role allows.
+  app.get('/api/me', (c) => {
+    const auth = c.get('auth');
+    return c.json({
+      identityEnabled: idEnabled,
+      subject: auth.principal?.subject,
+      name: auth.principal?.name,
+      roles: auth.principal?.roles ?? [],
+      permissions: [...auth.perms],
+    });
+  });
 
   app.get('/api/services', (c) => c.json({ services: store.listServices() }));
 
@@ -68,7 +118,11 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono {
     const deploy = service.repo
       ? deploys.latestForRepo(service.repo, service.environment)
       : undefined;
-    return c.json({ service, logs: store.recentLogs(id), deploy });
+    // Env values are secrets: mask them unless the caller has the reveal
+    // permission. Keys stay visible either way so the UI can list what is set.
+    const rawEnv = store.getEnv(id);
+    const env = rawEnv ? (c.get('auth').perms.has('reveal') ? rawEnv : maskEnv(rawEnv)) : undefined;
+    return c.json({ service, logs: store.recentLogs(id), deploy, env });
   });
 
   app.get('/api/deploys', (c) => {

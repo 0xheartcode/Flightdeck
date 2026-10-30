@@ -1,4 +1,5 @@
 import type {
+  EnvVar,
   LogLine,
   ServerMessage,
   ServiceInfo,
@@ -23,6 +24,10 @@ type ServicesListener = (services: ServiceInfo[]) => void;
 export class Store {
   private readonly services = new Map<string, ServiceInfo>();
   private readonly logs = new Map<string, LogLine[]>();
+  // Env vars are kept out of the broadcast registry: raw secret values must
+  // never ride the service list or stream. The REST detail endpoint serves
+  // them masked, and unmasks only for a caller with the reveal permission.
+  private readonly env = new Map<string, EnvVar[]>();
   private readonly serviceListeners = new Map<string, Set<Listener>>();
   private readonly servicesListeners = new Set<ServicesListener>();
 
@@ -43,6 +48,20 @@ export class Store {
     return this.logs.get(id) ?? [];
   }
 
+  /** Store (or, when empty/undefined, clear) a service's environment variables. */
+  setEnv(id: string, env: EnvVar[] | undefined): void {
+    if (env && env.length > 0) {
+      this.env.set(id, env);
+    } else {
+      this.env.delete(id);
+    }
+  }
+
+  /** A service's environment variables with raw values, or undefined if none. */
+  getEnv(id: string): EnvVar[] | undefined {
+    return this.env.get(id);
+  }
+
   upsertService(service: ServiceInfo): void {
     // Cap registry growth so a misbehaving agent cannot invent unbounded ids.
     if (!this.services.has(service.id) && this.services.size >= this.maxServices) {
@@ -58,9 +77,10 @@ export class Store {
 
   removeService(id: string): void {
     const existed = this.services.delete(id);
-    // Also drop the log buffer so churn (short-lived services) does not leak
-    // memory. Listener sets are cleaned up as subscribers unsubscribe/close.
+    // Also drop the log buffer and env so churn (short-lived services) does not
+    // leak memory. Listener sets are cleaned up as subscribers unsubscribe/close.
     this.logs.delete(id);
+    this.env.delete(id);
     if (existed) {
       this.emitServices();
     }

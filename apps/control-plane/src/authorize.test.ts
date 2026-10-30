@@ -21,6 +21,13 @@ const base: Config = {
   githubWebhookSecret: '',
   maxConnections: 1000,
   actionRatePerMin: 30,
+  oidcIssuer: '',
+  oidcAudience: '',
+  oidcHs256Secret: '',
+  oidcRs256PublicKey: '',
+  oidcRolesClaim: 'roles',
+  operatorRoles: [],
+  adminRoles: [],
 };
 
 // Resolves the one known token to the agent name "edge-1".
@@ -102,6 +109,36 @@ describe('authorizeUpgrade /stream', () => {
         verify,
       ).status,
     ).toBe(403);
+  });
+
+  it('requires a valid JWT and returns the principal when identity is enabled', () => {
+    const cfg = { ...base, oidcHs256Secret: 'secret' };
+    const principal = { subject: 'u1', roles: ['operator'] };
+    const verifyClient = (token: string | undefined) => (token === 'good' ? principal : null);
+
+    const ok = authorizeUpgrade(
+      { pathname: '/stream', origin: base.corsOrigin, queryToken: 'good' },
+      cfg,
+      verify,
+      verifyClient,
+    );
+    expect(ok.ok).toBe(true);
+    expect(ok.principal).toEqual(principal);
+
+    expect(
+      authorizeUpgrade(
+        { pathname: '/stream', origin: base.corsOrigin, queryToken: 'bad' },
+        cfg,
+        verify,
+        verifyClient,
+      ).status,
+    ).toBe(401);
+
+    // With identity on, the dashboard token path is not consulted: no token, 401.
+    expect(
+      authorizeUpgrade({ pathname: '/stream', origin: base.corsOrigin }, cfg, verify, verifyClient)
+        .status,
+    ).toBe(401);
   });
 });
 

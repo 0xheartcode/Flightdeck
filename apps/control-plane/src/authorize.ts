@@ -1,5 +1,6 @@
 import type { Config } from './config.js';
 import { tokenOk } from './auth.js';
+import { identityEnabled, type Principal } from './identity.js';
 
 export interface UpgradeContext {
   pathname: string;
@@ -17,10 +18,15 @@ export interface UpgradeDecision {
   status: number;
   /** Resolved agent name, set when an /agent upgrade is accepted. */
   agentName?: string;
+  /** Authenticated user, set when identity is enabled and a /stream upgrade is accepted. */
+  principal?: Principal;
 }
 
 /** Resolve a presented agent token to its name, or null if unknown. */
 export type VerifyAgent = (token: string | undefined) => string | null;
+
+/** Resolve a presented bearer token to a user principal, or null if invalid. */
+export type VerifyClient = (token: string | undefined) => Principal | null;
 
 const ACCEPT: UpgradeDecision = { ok: true, status: 101 };
 
@@ -38,14 +44,16 @@ export function originOk(origin: string | undefined, corsOrigin: string): boolea
  * decision into an accept or an HTTP error.
  *
  *   /agent  - requires the agent token in the Authorization header only.
- *   /stream - requires a matching Origin, then the dashboard token (header or
- *             query) when one is configured; open otherwise.
+ *   /stream - requires a matching Origin, then: a valid JWT (header or query)
+ *             when identity is enabled, else the dashboard token when one is
+ *             configured, else open.
  *   other   - 404.
  */
 export function authorizeUpgrade(
   ctx: UpgradeContext,
   config: Config,
   verifyAgent: VerifyAgent,
+  verifyClient?: VerifyClient,
 ): UpgradeDecision {
   if (ctx.pathname === '/agent') {
     // Agents must use the Authorization header; the token never goes in the URL.
@@ -57,11 +65,13 @@ export function authorizeUpgrade(
     if (!originOk(ctx.origin, config.corsOrigin)) {
       return { ok: false, status: 403 };
     }
-    if (config.dashboardToken) {
-      const presented = ctx.headerToken ?? ctx.queryToken;
-      if (!tokenOk(config.dashboardToken, presented)) {
-        return { ok: false, status: 401 };
-      }
+    const presented = ctx.headerToken ?? ctx.queryToken;
+    if (identityEnabled(config)) {
+      const principal = verifyClient ? verifyClient(presented) : null;
+      return principal ? { ok: true, status: 101, principal } : { ok: false, status: 401 };
+    }
+    if (config.dashboardToken && !tokenOk(config.dashboardToken, presented)) {
+      return { ok: false, status: 401 };
     }
     return ACCEPT;
   }
