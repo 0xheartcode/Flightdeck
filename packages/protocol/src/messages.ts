@@ -27,6 +27,18 @@ export const ServiceState = z.enum([
 ]);
 export type ServiceState = z.infer<typeof ServiceState>;
 
+/**
+ * A single environment variable on a service. SENSITIVE: values are secrets.
+ * The agent only reports these when configured to (FD_COLLECT_ENV), and the
+ * control plane masks the values before serving them to the browser unless the
+ * caller has the reveal permission. They are never broadcast over the stream.
+ */
+export const EnvVar = z.object({
+  key: z.string().max(512),
+  value: z.string().max(8192),
+});
+export type EnvVar = z.infer<typeof EnvVar>;
+
 /** A deployable unit the agent is tracking (one labelled container). */
 export const ServiceInfo = z.object({
   /** Stable id: the `flightdeck.service` label, else the container name. */
@@ -42,6 +54,13 @@ export const ServiceInfo = z.object({
   repo: z.string().max(256).optional(),
   /** `flightdeck.environment` label, for deploy correlation. */
   environment: z.string().max(128).optional(),
+  /**
+   * Container environment variables (agent -> control plane only). Present
+   * only when the agent collects them. The control plane strips this from the
+   * registry it broadcasts and serves it separately, masked, so raw values
+   * never reach the browser except through the reveal-gated detail endpoint.
+   */
+  env: z.array(EnvVar).max(1000).optional(),
 });
 export type ServiceInfo = z.infer<typeof ServiceInfo>;
 
