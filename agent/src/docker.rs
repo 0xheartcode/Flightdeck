@@ -1,7 +1,7 @@
 //! Docker/Podman API access via bollard. Talks to the Docker-compatible
 //! socket, so it works against Docker or a rootless Podman socket unchanged.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bollard::Docker;
@@ -13,7 +13,7 @@ use bollard::query_parameters::{
 use futures_util::StreamExt;
 use tokio::sync::mpsc::Sender;
 
-use crate::protocol::{AgentMessage, LogLine, Stats};
+use crate::protocol::{AgentMessage, EnvVar, LogLine, Stats};
 
 /// Cap a single log line so a container printing a huge line (or binary junk)
 /// cannot blow up a WebSocket frame or the control plane's memory.
@@ -34,6 +34,9 @@ pub struct Discovered {
     pub repo: Option<String>,
     /// `flightdeck.environment` label, for deploy correlation.
     pub environment: Option<String>,
+    /// The container's environment variables, populated only when env
+    /// collection is enabled. None means collection was off (not "no vars").
+    pub env: Option<Vec<EnvVar>>,
 }
 
 pub fn connect(docker_host: Option<&str>) -> anyhow::Result<Docker> {
@@ -47,8 +50,38 @@ pub fn connect(docker_host: Option<&str>) -> anyhow::Result<Docker> {
     Ok(docker)
 }
 
+/// Parse Docker's "KEY=VALUE" env entries into structured pairs. Splits on the
+/// first '=' only (values may contain '='). An entry with no '=' becomes a key
+/// with an empty value.
+pub fn parse_env(entries: &[String]) -> Vec<EnvVar> {
+    entries
+        .iter()
+        .map(|entry| match entry.split_once('=') {
+            Some((key, value)) => EnvVar {
+                key: key.to_string(),
+                value: value.to_string(),
+            },
+            None => EnvVar {
+                key: entry.to_string(),
+                value: String::new(),
+            },
+        })
+        .collect()
+}
+
 /// List containers carrying `<label>=true`.
-pub async fn discover(docker: &Docker, label: &str) -> anyhow::Result<Vec<Discovered>> {
+///
+/// When `collect_env` is true, each container's environment variables are read
+/// once and cached by container id (env is immutable for a container's life, so
+/// a later recreate yields a new id and a fresh read). Entries for containers
+/// not seen in this scan are evicted so the cache stays bounded. Env values are
+/// secrets and are never logged.
+pub async fn discover(
+    docker: &Docker,
+    label: &str,
+    collect_env: bool,
+    env_cache: &mut std::collections::HashMap<String, Vec<EnvVar>>,
+) -> anyhow::Result<Vec<Discovered>> {
     let mut filters: HashMap<String, Vec<String>> = HashMap::new();
     filters.insert("label".to_string(), vec![format!("{label}=true")]);
 
@@ -60,10 +93,12 @@ pub async fn discover(docker: &Docker, label: &str) -> anyhow::Result<Vec<Discov
     let summaries = docker.list_containers(Some(options)).await?;
 
     let mut found = Vec::with_capacity(summaries.len());
+    let mut seen: HashSet<String> = HashSet::new();
     for summary in summaries {
         let Some(container_id) = summary.id.clone() else {
             continue;
         };
+        seen.insert(container_id.clone());
         let name = summary
             .names
             .as_ref()
@@ -96,6 +131,18 @@ pub async fn discover(docker: &Docker, label: &str) -> anyhow::Result<Vec<Discov
             None
         };
 
+        // Env is immutable for a container's lifetime, so inspect at most once
+        // per container id and serve later scans from the cache.
+        let env = if collect_env {
+            if !env_cache.contains_key(&container_id) {
+                let vars = env_of(docker, &container_id).await;
+                env_cache.insert(container_id.clone(), vars);
+            }
+            env_cache.get(&container_id).cloned()
+        } else {
+            None
+        };
+
         found.push(Discovered {
             container_id,
             service_id,
@@ -106,9 +153,28 @@ pub async fn discover(docker: &Docker, label: &str) -> anyhow::Result<Vec<Discov
             exit_code,
             repo,
             environment,
+            env,
         });
     }
+
+    // Evict cache entries for containers that vanished since the last scan.
+    env_cache.retain(|id, _| seen.contains(id));
+
     Ok(found)
+}
+
+/// Inspect a container for its environment variables. Returns an empty vec on
+/// any error or when the container reports no config. Values are secrets, so
+/// they are never logged here or by callers.
+async fn env_of(docker: &Docker, container_id: &str) -> Vec<EnvVar> {
+    let entries = docker
+        .inspect_container(container_id, None)
+        .await
+        .ok()
+        .and_then(|info| info.config)
+        .and_then(|config| config.env)
+        .unwrap_or_default();
+    parse_env(&entries)
 }
 
 /// Inspect a container for its last exit code. Returns None on any error.
@@ -417,7 +483,28 @@ fn truncate(line: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{cpu_percent, split_image_ref, truncate, unique_service_id};
+    use super::{cpu_percent, parse_env, split_image_ref, truncate, unique_service_id};
+
+    #[test]
+    fn parse_env_splits_on_first_equals_only() {
+        let entries = vec![
+            "K=V".to_string(),
+            "K=a=b".to_string(),
+            "K=".to_string(),
+            "K".to_string(),
+        ];
+        let got = parse_env(&entries);
+        assert_eq!(got.len(), 4);
+        assert_eq!((got[0].key.as_str(), got[0].value.as_str()), ("K", "V"));
+        assert_eq!((got[1].key.as_str(), got[1].value.as_str()), ("K", "a=b"));
+        assert_eq!((got[2].key.as_str(), got[2].value.as_str()), ("K", ""));
+        assert_eq!((got[3].key.as_str(), got[3].value.as_str()), ("K", ""));
+    }
+
+    #[test]
+    fn parse_env_of_empty_slice_is_empty() {
+        assert!(parse_env(&[]).is_empty());
+    }
 
     #[test]
     fn split_image_ref_handles_tags_digests_and_registries() {

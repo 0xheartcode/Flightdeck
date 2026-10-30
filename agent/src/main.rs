@@ -15,7 +15,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::config::Config;
 use crate::docker::now_ms;
-use crate::protocol::{AgentMessage, IncomingCommand, ServiceInfo};
+use crate::protocol::{AgentMessage, EnvVar, IncomingCommand, ServiceInfo};
 
 /// Bounded outbound queue. If the control plane is down and a container is
 /// chatty, we drop new messages rather than grow memory without bound.
@@ -56,6 +56,9 @@ async fn main() -> anyhow::Result<()> {
     let mut tasks: HashMap<String, Vec<JoinHandle<()>>> = HashMap::new();
     // container_id -> globally-unique service id (to announce removal)
     let mut service_of: HashMap<String, String> = HashMap::new();
+    // container_id -> env vars, cached across scans so each container is
+    // inspected for its (immutable) env at most once.
+    let mut env_cache: HashMap<String, Vec<EnvVar>> = HashMap::new();
 
     let mut tick = interval(Duration::from_secs(config.scan_interval.max(1)));
 
@@ -80,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
                 // dead tasks would block a respawn and collection would stop.
                 tasks.retain(|_, handles| handles.iter().any(|h| !h.is_finished()));
 
-                let found = match docker::discover(&docker, &config.label).await {
+                let found = match docker::discover(&docker, &config.label, config.collect_env, &mut env_cache).await {
                     Ok(found) => found,
                     Err(err) => {
                         tracing::warn!(error = %err, "discovery failed (is the container socket reachable?)");
@@ -117,6 +120,7 @@ async fn main() -> anyhow::Result<()> {
                         created_at: container.created_at,
                         repo: container.repo.clone(),
                         environment: container.environment.clone(),
+                        env: container.env.clone(),
                     }));
                     let _ = tx.try_send(AgentMessage::status(
                         id.clone(),

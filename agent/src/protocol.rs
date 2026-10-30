@@ -24,6 +24,13 @@ pub struct IncomingCommand {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EnvVar {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServiceInfo {
     pub id: String,
     pub name: String,
@@ -36,6 +43,8 @@ pub struct ServiceInfo {
     pub repo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env: Option<Vec<EnvVar>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
