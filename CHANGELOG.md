@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Identity and access control: the control plane can verify a JWT bearer token
+  (any OIDC provider that issues JWTs) on the browser stream and REST API, using
+  a configured HS256 secret or RS256 public key (`FD_OIDC_*`). Verification is
+  local (no JWKS fetch). Roles map to permissions: `FD_OPERATOR_ROLES` gate
+  actions, `FD_ADMIN_ROLES` gate revealing env values, and the audit log records
+  the authenticated user. Identity is off unless a key is set, so the existing
+  single dashboard token keeps working unchanged. The web UI gains a sign-in
+  field and hides controls a user's role does not allow.
+- Read-only environment variables per service: the agent can collect each
+  container's env (`FD_COLLECT_ENV`, off by default since values are secrets)
+  and report it to the control plane, which keeps it out of the broadcast
+  registry and the stream, serves it masked at `GET /api/services/:id`, and
+  unmasks it only for a caller with the reveal (admin) permission. The UI shows
+  an environment panel. `GET /api/me` reports the caller's identity and perms.
 - GitHub Actions deploy correlation: a signed `POST /github/webhook` ingests
   `workflow_run` events, persists them in SQLite (`DeployStore`, `FD_DB_FILE`),
   and correlates each to services by the `flightdeck.repo` label. Matching
