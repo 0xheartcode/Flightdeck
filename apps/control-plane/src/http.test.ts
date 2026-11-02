@@ -200,4 +200,20 @@ describe('http api', () => {
     const revealed = await read(admin);
     expect(revealed.env[0]).toEqual({ key: 'DATABASE_URL', value: 'postgres://secret' });
   });
+
+  it('serves /healthz and /readyz without auth, even when identity is on', async () => {
+    const ctx = makeContext(makeConfig({ oidcHs256Secret: SECRET }));
+    const app = createHttpApp(ctx, () => 3);
+
+    const health = await app.request('/healthz');
+    expect(health.status).toBe(200);
+    expect(await health.json()).toMatchObject({ status: 'ok' });
+
+    const ready = await app.request('/readyz');
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toMatchObject({ status: 'ready', agents: 3 });
+
+    // Contrast: the authed /api/health still requires a token when identity is on.
+    expect((await app.request('/api/health')).status).toBe(401);
+  });
 });

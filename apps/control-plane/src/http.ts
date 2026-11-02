@@ -47,6 +47,22 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     c.text(metrics.render({ agents: agentCount(), services: store.listServices().length })),
   );
 
+  // Liveness and readiness probes, unauthenticated and outside /api so a
+  // container orchestrator can reach them without a token (the /api surface is
+  // gated, so a probe there would fail once auth is on). They expose no secrets.
+  //   /healthz - liveness: the process is up and serving.
+  //   /readyz  - readiness: dependencies (the deploy store) are responsive.
+  app.get('/healthz', (c) => c.json({ status: 'ok', version: '0.1.0' }));
+  app.get('/readyz', (c) => {
+    try {
+      // A trivial query proves the SQLite handle is open and responsive.
+      deploys.list(undefined, 1);
+    } catch {
+      return c.json({ status: 'not ready' }, 503);
+    }
+    return c.json({ status: 'ready', agents: agentCount(), services: store.listServices().length });
+  });
+
   // GitHub webhook: authenticated by HMAC signature, not the dashboard token,
   // so it lives outside /api. Disabled unless a secret is configured.
   app.post('/github/webhook', async (c) => {
