@@ -1,8 +1,11 @@
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { generateKeyPairSync, sign as signData, type KeyObject } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { testConfig, mintHs256 } from './config.testutil.js';
 import {
   identityEnabled,
+  JwksCache,
   legacyPermissions,
   permissionsFor,
   verifyToken,
@@ -11,13 +14,14 @@ import {
 
 const SECRET = 'top-secret-signing-key';
 
-/** Mint an RS256 JWT with a given private key, for the asymmetric path. */
+/** Mint an RS256 JWT with a given private key, optionally with a header `kid`. */
 function mintRs256(
   claims: Record<string, unknown>,
   privateKey: ReturnType<typeof genKeys>['privateKey'],
+  kid?: string,
 ): string {
   const seg = (obj: unknown): string => Buffer.from(JSON.stringify(obj)).toString('base64url');
-  const header = seg({ alg: 'RS256', typ: 'JWT' });
+  const header = seg({ alg: 'RS256', typ: 'JWT', ...(kid ? { kid } : {}) });
   const payload = seg(claims);
   const signature = signData(
     'RSA-SHA256',
@@ -132,6 +136,39 @@ describe('verifyToken (RS256)', () => {
     const other = genKeys();
     const forged = mintRs256({ sub: 'u1', exp: future }, other.privateKey);
     expect(verifyToken(forged, config)).toBeNull();
+  });
+});
+
+describe('JwksCache (RS256 via JWKS)', () => {
+  it('fetches keys and resolves a token by its kid, rejecting an unknown kid', async () => {
+    const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const jwk = publicKey.export({ format: 'jwk' });
+    (jwk as { kid?: string }).kid = 'key-1';
+
+    const server: Server = createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ keys: [jwk] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const cache = new JwksCache(`http://127.0.0.1:${port}/jwks`);
+      await cache.refresh();
+      // Identity is on via the JWKS URI; verifyToken uses the passed cache.
+      const config = testConfig({ oidcJwksUri: `http://127.0.0.1:${port}/jwks` });
+
+      const good = mintRs256({ sub: 'u1', roles: ['operator'], exp: future }, privateKey, 'key-1');
+      expect(verifyToken(good, config, cache)?.subject).toBe('u1');
+
+      const wrongKid = mintRs256({ sub: 'u1', exp: future }, privateKey, 'key-unknown');
+      expect(verifyToken(wrongKid, config, cache)).toBeNull();
+
+      // No cache available at all: cannot resolve the key, so it fails closed.
+      expect(verifyToken(good, config, undefined)).toBeNull();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 

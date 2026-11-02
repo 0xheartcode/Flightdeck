@@ -31,6 +31,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     oidcAudience: '',
     oidcHs256Secret: '',
     oidcRs256PublicKey: '',
+    oidcJwksUri: '',
     oidcRolesClaim: 'roles',
     operatorRoles: [],
     adminRoles: [],

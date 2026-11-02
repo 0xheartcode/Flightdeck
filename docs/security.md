@@ -54,12 +54,14 @@ Mitigations, strongest first:
 
 - For per-user access instead of one shared token, configure identity: the
   control plane verifies a JWT bearer (any OIDC provider that issues JWTs) with
-  a configured HS256 secret or RS256 public key (`FD_OIDC_*`). Setting a key
-  turns identity on and the dashboard token no longer applies. Verification is
-  local: the signature (HS256 or RS256), `exp`/`nbf` (with small leeway), and
-  `iss`/`aud` when configured are all checked, and the `none` algorithm is
-  rejected. There is no JWKS fetch, so no network dependency; a rotating JWKS
-  endpoint is a later addition.
+  a configured HS256 secret, a static RS256 public key, or an OIDC JWKS endpoint
+  (`FD_OIDC_*`). Setting any of these turns identity on and the dashboard token
+  no longer applies. The signature (HS256 or RS256), `exp`/`nbf` (with small
+  leeway), and `iss`/`aud` when configured are all checked, and the `none`
+  algorithm is rejected. With `FD_OIDC_JWKS_URI`, the provider's RS256 keys are
+  fetched and refreshed in the background and matched to a token by its `kid`,
+  so rotating keys work; verification itself stays synchronous, reading an
+  in-memory key cache rather than fetching per request.
 - Roles (read from `FD_OIDC_ROLES_CLAIM`, a dotted path is allowed) map to
   permissions: a role in `FD_OPERATOR_ROLES` may trigger actions, a role in
   `FD_ADMIN_ROLES` may additionally reveal env values, and every authenticated

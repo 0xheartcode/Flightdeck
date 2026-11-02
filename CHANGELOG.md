@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- OIDC JWKS support: set `FD_OIDC_JWKS_URI` and the control plane fetches and
+  refreshes the provider's RS256 signing keys in the background, matching each
+  token to a key by its `kid`. This makes identity work with providers that
+  rotate keys (Auth0, Keycloak, Google), alongside the existing static HS256
+  secret and RS256 public key. Verification stays synchronous (it reads an
+  in-memory key cache, never a per-request fetch).
 - Production deployment path: `docker/compose.prod.yaml` (control plane + web
   only, bound to localhost for a TLS reverse proxy, with a persistent `/data`
   volume for the deploy store and audit trail and a readiness healthcheck), a

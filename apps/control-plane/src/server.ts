@@ -7,7 +7,7 @@ import type { Context } from './context.js';
 import { logger } from './logger.js';
 import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
-import { logIdentityConfig, verifyToken } from './identity.js';
+import { JwksCache, logIdentityConfig, verifyToken } from './identity.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
 import { AuditLog } from './audit.js';
@@ -38,6 +38,10 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
 
   const credentials = new CredentialStore(config);
   const deploys = new DeployStore(config.dbFile);
+  // Track a provider's rotating RS256 keys when a JWKS URI is set; the cache
+  // refreshes in the background so verification stays synchronous.
+  const jwks = config.oidcJwksUri ? new JwksCache(config.oidcJwksUri) : undefined;
+  const stopJwks = jwks?.start();
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
@@ -45,6 +49,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     audit: new AuditLog(config.auditMax, config.auditFile || undefined),
     metrics: new Metrics(),
     deploys,
+    jwks,
   };
 
   log.info(
@@ -101,7 +106,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       },
       config,
       (token) => credentials.verify(token),
-      (token) => verifyToken(token, config),
+      (token) => verifyToken(token, config, jwks),
     );
 
     if (!decision.ok) {
@@ -147,6 +152,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   const close = (): Promise<void> =>
     new Promise((resolve) => {
       clearInterval(revocationTimer);
+      stopJwks?.();
       agentWss.close();
       clientWss.close();
       deploys.close();
