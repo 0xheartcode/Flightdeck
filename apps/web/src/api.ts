@@ -14,6 +14,15 @@ export interface Me {
   name?: string;
   roles: string[];
   permissions: Array<'view' | 'act' | 'reveal'>;
+  /** True when durable log search (Loki) is configured, so the UI can offer a search box. */
+  logSearch: boolean;
+}
+
+/** One line returned by the durable log search endpoint, newest-last. */
+export interface SearchLine {
+  ts: number;
+  stream: string;
+  line: string;
 }
 
 /** Full detail for one service (GET /api/services/:id). */
@@ -115,6 +124,30 @@ export async function fetchServiceDetail(id: string): Promise<ServiceDetail> {
     throw new ApiError(res.status, `service detail request failed: ${res.status}`);
   }
   return (await res.json()) as ServiceDetail;
+}
+
+/**
+ * Durable log search for a service (GET /api/services/:id/logs/search). The
+ * substring filter `q` is sent only when non-empty; from/to default to the last
+ * hour server-side. Returns [] when durable search is not configured (404).
+ */
+export async function searchLogs(id: string, q: string): Promise<SearchLine[]> {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  const query = params.toString();
+  const url = `${API_URL}/api/services/${encodeURIComponent(id)}/logs/search${
+    query ? `?${query}` : ''
+  }`;
+  const res = await fetch(url, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (res.status === 404) return [];
+  if (!res.ok) {
+    throw new ApiError(res.status, `log search request failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { lines: SearchLine[] };
+  return data.lines;
 }
 
 /**

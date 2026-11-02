@@ -1,9 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ActionKind, DeployRecord, DeployStatus, LogLine, Stats } from '@flightdeck/protocol';
+import { searchLogs } from '@/api';
 import type { ActionResult, LiveStatus } from '@/hooks/useLogStream';
 import { cx, formatBytes, formatTime } from '@/lib/format';
 
 interface Props {
+  serviceId: string;
   serviceName: string;
   logs: LogLine[];
   connected: boolean;
@@ -15,6 +18,8 @@ interface Props {
   onAction: (action: ActionKind) => void;
   /** Whether the caller may trigger operator actions. Disables the buttons when false. */
   canAct?: boolean;
+  /** Whether durable log search is configured; shows the search box when true. */
+  searchEnabled?: boolean;
 }
 
 const DEPLOY_COLORS: Record<DeployStatus, string> = {
@@ -38,6 +43,7 @@ function DeployBadge({ deploy }: { deploy: DeployRecord }) {
 }
 
 export function LogViewer({
+  serviceId,
   serviceName,
   logs,
   connected,
@@ -48,14 +54,44 @@ export function LogViewer({
   deploy,
   onAction,
   canAct = true,
+  searchEnabled = false,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState('');
+  // The committed query: null means the live tail is showing; a string (even
+  // empty) means the search-results view is active for that term.
+  const [submitted, setSubmitted] = useState<string | null>(null);
 
   const actionTitle = canAct ? undefined : 'Requires an operator role';
+  const searching = submitted !== null;
+
+  const search = useQuery({
+    queryKey: ['logSearch', serviceId, submitted],
+    queryFn: () => searchLogs(serviceId, submitted ?? ''),
+    enabled: searchEnabled && searching,
+  });
+
+  // Switching services returns to the live tail and clears the draft.
+  useEffect(() => {
+    setSubmitted(null);
+    setDraft('');
+  }, [serviceId]);
 
   useEffect(() => {
+    if (searching) return;
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+  }, [logs, searching]);
+
+  const runSearch = (e: React.FormEvent): void => {
+    e.preventDefault();
+    setSubmitted(draft.trim());
+  };
+
+  const clearSearch = (): void => {
+    setSubmitted(null);
+  };
+
+  const results = search.data ?? [];
 
   const confirmAction = (action: ActionKind, prompt: string): void => {
     if (window.confirm(`${prompt} ${serviceName}?`)) {
@@ -113,8 +149,56 @@ export function LogViewer({
           <span className="tabular-nums">{logs.length} lines</span>
         </span>
       </div>
+      {searchEnabled && (
+        <form
+          onSubmit={runSearch}
+          className="flex flex-wrap items-center gap-2 border-b border-slate-800 px-4 py-2 text-xs"
+        >
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Search durable logs..."
+            spellCheck={false}
+            aria-label="Search logs"
+            className="min-w-0 flex-1 rounded border border-slate-700 bg-[#0b0e14] px-1.5 py-0.5 font-mono text-slate-200 focus:border-slate-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="shrink-0 rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100"
+          >
+            Search
+          </button>
+          {searching && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="shrink-0 rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100"
+            >
+              Clear
+            </button>
+          )}
+        </form>
+      )}
       <div className="flex-1 overflow-auto bg-[#07090d] p-4 font-mono text-xs leading-relaxed">
-        {logs.length === 0 ? (
+        {searching ? (
+          search.isLoading ? (
+            <p className="text-slate-600">Searching...</p>
+          ) : search.isError ? (
+            <p className="text-rose-400">Search failed. Try again.</p>
+          ) : results.length === 0 ? (
+            <p className="text-slate-600">No matching log lines.</p>
+          ) : (
+            results.map((l, i) => (
+              <div key={i} className="flex gap-3 whitespace-pre-wrap break-all">
+                <span className="shrink-0 text-slate-600">{formatTime(l.ts)}</span>
+                <span className="shrink-0 text-slate-600">{l.stream}</span>
+                <span className={l.stream === 'stderr' ? 'text-rose-400' : 'text-slate-200'}>
+                  {l.line}
+                </span>
+              </div>
+            ))
+          )
+        ) : logs.length === 0 ? (
           <p className="text-slate-600">Waiting for logs...</p>
         ) : (
           logs.map((l, i) => (

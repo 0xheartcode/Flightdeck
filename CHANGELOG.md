@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Durable log search (Loki): set `FD_LOKI_URL` and the control plane ships every
+  log line to Loki (batched) in addition to the in-memory tail, and
+  `GET /api/services/:id/logs/search?q=&from=&to=` runs a LogQL range query so
+  history is searchable across time (the UI gains a search box). The in-memory
+  ring stays the live view; Loki is the durable, searchable archive. Uses only
+  fetch, no new dependency.
 - OIDC browser login: an authorization-code + PKCE flow so users sign in with
   the identity provider instead of pasting a JWT. `/auth/login` redirects to the
   provider, `/auth/callback` exchanges the code and stores the provider's

@@ -191,6 +191,7 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     return c.json({
       identityEnabled: idEnabled,
       loginFlow: loginEnabled,
+      logSearch: Boolean(ctx.loki),
       subject: auth.principal?.subject,
       name: auth.principal?.name,
       roles: auth.principal?.roles ?? [],
@@ -214,6 +215,26 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     const rawEnv = store.getEnv(id);
     const env = rawEnv ? (c.get('auth').perms.has('reveal') ? rawEnv : maskEnv(rawEnv)) : undefined;
     return c.json({ service, logs: store.recentLogs(id), deploy, env });
+  });
+
+  // Durable log search over Loki (when configured). Unlike the in-memory tail,
+  // this searches history across time with an optional text filter.
+  app.get('/api/services/:id/logs/search', async (c) => {
+    if (!ctx.loki) return c.json({ error: 'log search is not configured' }, 404);
+    const id = c.req.param('id');
+    const q = c.req.query('q') || undefined;
+    const now = Date.now();
+    const from = Number(c.req.query('from'));
+    const to = Number(c.req.query('to'));
+    const limit = Number(c.req.query('limit'));
+    const lines = await ctx.loki.search(
+      id,
+      q,
+      Number.isFinite(from) && from > 0 ? from : now - 3_600_000,
+      Number.isFinite(to) && to > 0 ? to : now,
+      Number.isFinite(limit) && limit > 0 ? Math.min(limit, 5000) : 200,
+    );
+    return c.json({ lines });
   });
 
   app.get('/api/deploys', (c) => {

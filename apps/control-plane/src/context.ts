@@ -3,6 +3,7 @@ import type { CommandBus } from './commands.js';
 import type { Config } from './config.js';
 import type { DeployStore } from './deploys.js';
 import type { KeyResolver } from './identity.js';
+import type { LokiClient } from './loki.js';
 import type { Metrics } from './metrics.js';
 import type { Store } from './store.js';
 
@@ -16,4 +17,6 @@ export interface Context {
   deploys: DeployStore;
   /** JWKS key cache for RS256 verification, when a JWKS URI is configured. */
   jwks?: KeyResolver;
+  /** Durable log shipping and search, when a Loki URL is configured. */
+  loki?: LokiClient;
 }
