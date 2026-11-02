@@ -6,6 +6,8 @@
     "FD_CONTROL_PLANE_PORT",
     "FD_AGENT_TOKEN",
     "FD_LOG_BUFFER_SIZE",
+    "FD_LOG_LEVEL",
+    "FD_LOG_PRETTY",
     "VITE_FD_API_URL"
   ],
   "tasks": {

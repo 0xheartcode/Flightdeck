@@ -1,8 +1,10 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { AuditLog } from './audit.js';
 import { CommandBus } from './commands.js';
 import type { Config } from './config.js';
 import type { Context } from './context.js';
+import { DeployStore } from './deploys.js';
 import { createHttpApp } from './http.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
@@ -23,6 +25,10 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     actionTimeoutMs: 20_000,
     auditMax: 500,
     auditFile: '',
+    dbFile: ':memory:',
+    githubWebhookSecret: '',
+    maxConnections: 1000,
+    actionRatePerMin: 30,
     ...overrides,
   };
 }
@@ -34,6 +40,7 @@ function makeContext(config = makeConfig()): Context {
     commands: new CommandBus(1000),
     audit: new AuditLog(50),
     metrics: new Metrics(),
+    deploys: new DeployStore(),
   };
 }
 
@@ -90,5 +97,34 @@ describe('http api', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { audit: Array<{ serviceId: string }> };
     expect(body.audit[0]?.serviceId).toBe('api');
+  });
+
+  it('ingests a signed GitHub workflow_run webhook and rejects a bad signature', async () => {
+    const ctx = makeContext(makeConfig({ githubWebhookSecret: 'whsec' }));
+    const app = createHttpApp(ctx, () => 0);
+    const payload = JSON.stringify({
+      repository: { full_name: 'acme/api' },
+      workflow_run: { id: 7, head_sha: 'deadbeef', status: 'completed', conclusion: 'success' },
+    });
+    const sig = 'sha256=' + createHmac('sha256', 'whsec').update(payload).digest('hex');
+
+    const ok = await app.request('/github/webhook', {
+      method: 'POST',
+      headers: { 'x-github-event': 'workflow_run', 'x-hub-signature-256': sig },
+      body: payload,
+    });
+    expect(ok.status).toBe(200);
+
+    const list = (await (await app.request('/api/deploys')).json()) as {
+      deploys: Array<{ repo: string; status: string }>;
+    };
+    expect(list.deploys[0]).toMatchObject({ repo: 'acme/api', status: 'success' });
+
+    const bad = await app.request('/github/webhook', {
+      method: 'POST',
+      headers: { 'x-github-event': 'workflow_run', 'x-hub-signature-256': 'sha256=00' },
+      body: payload,
+    });
+    expect(bad.status).toBe(401);
   });
 });

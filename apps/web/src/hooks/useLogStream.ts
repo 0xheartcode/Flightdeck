@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ActionKind, LogLine, ServerMessage, ServiceState, Stats } from '@flightdeck/protocol';
+import type {
+  ActionKind,
+  DeployRecord,
+  LogLine,
+  ServerMessage,
+  ServiceState,
+  Stats,
+} from '@flightdeck/protocol';
 import { streamUrl } from '@/api';
 
 const MAX_LINES = 2000;
@@ -23,6 +30,7 @@ export interface LogStream {
   status: LiveStatus | null;
   actionResult: ActionResult | null;
   actionPending: boolean;
+  deploy: DeployRecord | null;
   sendAction: (action: ActionKind) => void;
 }
 
@@ -39,6 +47,7 @@ export function useLogStream(serviceId: string | null): LogStream {
   const [status, setStatus] = useState<LiveStatus | null>(null);
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
   const [actionPending, setActionPending] = useState(false);
+  const [deploy, setDeploy] = useState<DeployRecord | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -48,6 +57,7 @@ export function useLogStream(serviceId: string | null): LogStream {
     setStatus(null);
     setActionResult(null);
     setActionPending(false);
+    setDeploy(null);
     if (!serviceId) {
       return;
     }
@@ -91,6 +101,8 @@ export function useLogStream(serviceId: string | null): LogStream {
         } else if (msg.type === 'action_result' && msg.serviceId === serviceId) {
           setActionPending(false);
           setActionResult({ action: msg.action, ok: msg.ok, error: msg.error });
+        } else if (msg.type === 'deploy' && msg.serviceId === serviceId) {
+          setDeploy(msg.deploy);
         }
       };
     };
@@ -116,5 +128,5 @@ export function useLogStream(serviceId: string | null): LogStream {
     [serviceId],
   );
 
-  return { logs, connected, stats, status, actionResult, actionPending, sendAction };
+  return { logs, connected, stats, status, actionResult, actionPending, deploy, sendAction };
 }

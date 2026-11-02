@@ -32,6 +32,10 @@ pub struct ServiceInfo {
     pub state: String,
     pub host: String,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -15,9 +15,13 @@ RUN mkdir -p agent/src \
     && echo 'fn main() {}' > agent/src/main.rs \
     && cargo build --release -p flightdeck-agent \
     && rm -rf agent/src
-# Now the real source; only the agent crate recompiles.
+# Now the real source; only the agent crate recompiles. Remove the stub build
+# artifacts and touch main.rs so cargo rebuilds the binary (otherwise its
+# fingerprint matches the stub and the real code is never compiled).
 COPY agent ./agent
-RUN cargo build --release -p flightdeck-agent
+RUN rm -f target/release/flightdeck-agent target/release/deps/flightdeck_agent-* \
+    && touch agent/src/main.rs \
+    && cargo build --release -p flightdeck-agent
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \

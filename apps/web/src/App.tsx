@@ -7,7 +7,7 @@ import { LogViewer } from '@/components/LogViewer';
 export function App() {
   const { data: services = [], isLoading, isError } = useServices();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { logs, connected, stats, status, actionResult, actionPending, sendAction } =
+  const { logs, connected, stats, status, actionResult, actionPending, deploy, sendAction } =
     useLogStream(selectedId);
 
   const selected = services.find((s) => s.id === selectedId) ?? null;
@@ -43,6 +43,7 @@ export function App() {
               status={status}
               actionResult={actionResult}
               actionPending={actionPending}
+              deploy={deploy}
               onAction={sendAction}
             />
           ) : (

@@ -30,6 +30,10 @@ pub struct Discovered {
     pub created_at: i64,
     /// Last exit code, populated for exited containers.
     pub exit_code: Option<i64>,
+    /// `flightdeck.repo` label (owner/name), for deploy correlation.
+    pub repo: Option<String>,
+    /// `flightdeck.environment` label, for deploy correlation.
+    pub environment: Option<String>,
 }
 
 pub fn connect(docker_host: Option<&str>) -> anyhow::Result<Docker> {
@@ -66,12 +70,15 @@ pub async fn discover(docker: &Docker, label: &str) -> anyhow::Result<Vec<Discov
             .and_then(|names| names.first())
             .map(|n| n.trim_start_matches('/').to_string())
             .unwrap_or_else(|| container_id.chars().take(12).collect());
-        let service_id = summary
-            .labels
-            .as_ref()
+        let labels = summary.labels.as_ref();
+        let service_id = labels
             .and_then(|labels| labels.get("flightdeck.service"))
             .cloned()
             .unwrap_or_else(|| name.clone());
+        let repo = labels.and_then(|l| l.get("flightdeck.repo")).cloned();
+        let environment = labels
+            .and_then(|l| l.get("flightdeck.environment"))
+            .cloned();
         let image = summary.image.clone().unwrap_or_default();
         let state = summary
             .state
@@ -97,6 +104,8 @@ pub async fn discover(docker: &Docker, label: &str) -> anyhow::Result<Vec<Discov
             state,
             created_at,
             exit_code,
+            repo,
+            environment,
         });
     }
     Ok(found)
