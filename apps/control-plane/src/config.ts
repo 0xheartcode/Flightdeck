@@ -53,6 +53,22 @@ export interface Config {
   operatorRoles: string[];
   /** Roles permitted to reveal masked environment variable values. */
   adminRoles: string[];
+  /** OIDC client id for the browser login (authorization-code) flow. */
+  oidcClientId: string;
+  /** OIDC client secret (confidential client); empty uses PKCE only. */
+  oidcClientSecret: string;
+  /** OIDC authorization endpoint (where the browser is sent to sign in). */
+  oidcAuthEndpoint: string;
+  /** OIDC token endpoint (where the callback exchanges the code). */
+  oidcTokenEndpoint: string;
+  /** Redirect URI registered with the provider (this control plane's /auth/callback). */
+  oidcRedirectUri: string;
+  /** Space-separated OIDC scopes requested at login. */
+  oidcScopes: string;
+  /** HMAC secret for signing the login state and session cookies. */
+  sessionSecret: string;
+  /** Where to send the browser after a successful login (the web UI origin). */
+  webAppUrl: string;
 }
 
 /** Split a comma or newline separated role list into trimmed, non-empty names. */
@@ -124,6 +140,14 @@ export function loadConfig(): Config {
     oidcRolesClaim: process.env.FD_OIDC_ROLES_CLAIM || 'roles',
     operatorRoles: parseList(process.env.FD_OPERATOR_ROLES),
     adminRoles: parseList(process.env.FD_ADMIN_ROLES),
+    oidcClientId: process.env.FD_OIDC_CLIENT_ID ?? '',
+    oidcClientSecret: process.env.FD_OIDC_CLIENT_SECRET ?? '',
+    oidcAuthEndpoint: process.env.FD_OIDC_AUTH_ENDPOINT ?? '',
+    oidcTokenEndpoint: process.env.FD_OIDC_TOKEN_ENDPOINT ?? '',
+    oidcRedirectUri: process.env.FD_OIDC_REDIRECT_URI ?? '',
+    oidcScopes: process.env.FD_OIDC_SCOPES || 'openid profile email',
+    sessionSecret: process.env.FD_SESSION_SECRET ?? '',
+    webAppUrl: process.env.FD_WEB_APP_URL || process.env.FD_CORS_ORIGIN || 'http://localhost:5173',
   };
 
   // Agent-credential presence is validated by the CredentialStore, which
@@ -150,6 +174,24 @@ export function loadConfig(): Config {
       'FD_ENABLE_ACTIONS is on without authentication; anyone who can reach the stream ' +
         'can restart or redeploy containers. Configure identity, set a dashboard token, ' +
         'or restrict the network.',
+    );
+  }
+  const loginParts =
+    config.oidcClientId ||
+    config.oidcAuthEndpoint ||
+    config.oidcTokenEndpoint ||
+    config.oidcRedirectUri;
+  const loginComplete =
+    config.oidcClientId &&
+    config.oidcAuthEndpoint &&
+    config.oidcTokenEndpoint &&
+    config.oidcRedirectUri &&
+    config.sessionSecret;
+  if (loginParts && !loginComplete) {
+    log.warn(
+      'OIDC browser login is partially configured and therefore disabled; it needs ' +
+        'FD_OIDC_CLIENT_ID, FD_OIDC_AUTH_ENDPOINT, FD_OIDC_TOKEN_ENDPOINT, ' +
+        'FD_OIDC_REDIRECT_URI, and FD_SESSION_SECRET.',
     );
   }
 

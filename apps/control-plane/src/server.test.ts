@@ -35,6 +35,14 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     oidcRolesClaim: 'roles',
     operatorRoles: [],
     adminRoles: [],
+    oidcClientId: '',
+    oidcClientSecret: '',
+    oidcAuthEndpoint: '',
+    oidcTokenEndpoint: '',
+    oidcRedirectUri: '',
+    oidcScopes: 'openid profile email',
+    sessionSecret: '',
+    webAppUrl: 'http://localhost:5173',
     ...overrides,
   };
 }
@@ -441,5 +449,23 @@ describe('control plane integration', () => {
     op.close();
     admin.close();
     agent.close();
+  });
+
+  it('authenticates a browser stream via the login session cookie', async () => {
+    const SECRET = 'cookie-secret';
+    cp = startControlPlane(testConfig({ oidcHs256Secret: SECRET }));
+    const port = await cp.listening;
+    const token = mintHs256({ sub: 'carol', roles: ['operator'], exp: future }, SECRET);
+
+    // A valid session cookie authenticates the upgrade.
+    const withCookie = new WebSocket(`ws://127.0.0.1:${port}/stream`, {
+      headers: { Cookie: `fd_session=${token}` },
+    });
+    await expect(open(withCookie)).resolves.toBeUndefined();
+    withCookie.close();
+
+    // No credential at all is rejected when identity is on.
+    const none = new WebSocket(`ws://127.0.0.1:${port}/stream`);
+    await expect(open(none)).rejects.toBeTruthy();
   });
 });
