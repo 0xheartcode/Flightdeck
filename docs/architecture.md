@@ -45,8 +45,10 @@ allowlist is rejected; there is no arbitrary execution.
 - **Store**: in-memory service registry plus a bounded ring buffer of recent
   logs per service (`FD_LOG_BUFFER_SIZE`). Env vars are held in a separate map,
   kept out of the registry and the stream so raw secret values are never
-  broadcast. Deliberately not durable; long-term log storage is a later concern
-  (ship to Loki).
+  broadcast. The ring is the live view and is deliberately not durable; when
+  `FD_LOKI_URL` is set, every line is also shipped to Loki (batched) for durable
+  storage and search via `GET /api/services/:id/logs/search` (LogQL range
+  queries). See loki.ts.
 
 ### Web (`apps/web/`, React)
 
@@ -101,4 +103,3 @@ actions being enabled, and audited.
   `DeployStore` seam already allows a Postgres backend) so more than one instance
   can run.
 - **Multi-runtime**: systemd and Kubernetes beyond Docker/Podman.
-- **Durable logs**: optional shipping to Loki for search and retention.

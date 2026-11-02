@@ -69,6 +69,10 @@ export interface Config {
   sessionSecret: string;
   /** Where to send the browser after a successful login (the web UI origin). */
   webAppUrl: string;
+  /** Loki base URL for durable log shipping and search; empty disables it. */
+  lokiUrl: string;
+  /** Optional Loki tenant id (X-Scope-OrgID header) for multi-tenant setups. */
+  lokiTenant: string;
 }
 
 /** Split a comma or newline separated role list into trimmed, non-empty names. */
@@ -148,6 +152,8 @@ export function loadConfig(): Config {
     oidcScopes: process.env.FD_OIDC_SCOPES || 'openid profile email',
     sessionSecret: process.env.FD_SESSION_SECRET ?? '',
     webAppUrl: process.env.FD_WEB_APP_URL || process.env.FD_CORS_ORIGIN || 'http://localhost:5173',
+    lokiUrl: (process.env.FD_LOKI_URL ?? '').replace(/\/$/, ''),
+    lokiTenant: process.env.FD_LOKI_TENANT ?? '',
   };
 
   // Agent-credential presence is validated by the CredentialStore, which

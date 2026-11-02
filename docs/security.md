@@ -123,7 +123,10 @@ Mitigations, strongest first:
 
 - Logs can contain secrets that applications print. Treat the log tail and the
   log stream as sensitive, and put the control plane behind authentication
-  before exposing it.
+  before exposing it. When `FD_LOKI_URL` is set, those lines are also shipped to
+  Loki: secure that Loki instance and the network path to it, and set
+  `FD_LOKI_TENANT` for a multi-tenant deployment. The search API is gated by the
+  same `/api` authentication as everything else.
 - Flightdeck-CD does not persist application secrets. Environment surfacing is
   off by default (`FD_COLLECT_ENV`); when on, the agent reports each container's
   env to the control plane over the authenticated agent link. The control plane

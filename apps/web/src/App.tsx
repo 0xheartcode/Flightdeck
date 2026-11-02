@@ -79,6 +79,7 @@ export function App() {
               />
               <div className="min-h-0 flex-1">
                 <LogViewer
+                  serviceId={selected.id}
                   serviceName={selected.name}
                   logs={logs}
                   connected={connected}
@@ -89,6 +90,7 @@ export function App() {
                   deploy={deploy}
                   onAction={sendAction}
                   canAct={canAct}
+                  searchEnabled={me?.logSearch ?? false}
                 />
               </div>
             </>
