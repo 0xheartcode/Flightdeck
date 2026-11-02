@@ -157,7 +157,10 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     return c.json({ ok: true });
   });
 
-  app.use('/api/*', cors({ origin: config.corsOrigin }));
+  // Allow credentials (the session cookie, and the web app's credentialed
+  // fetches) only when a specific origin is set: the browser forbids combining
+  // Access-Control-Allow-Credentials with a wildcard origin.
+  app.use('/api/*', cors({ origin: config.corsOrigin, credentials: config.corsOrigin !== '*' }));
 
   // Authenticate every /api request and resolve its permissions. With identity
   // on, a valid JWT is required; otherwise the legacy dashboard token applies
