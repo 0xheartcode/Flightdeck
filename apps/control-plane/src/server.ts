@@ -13,7 +13,7 @@ import { sessionToken } from './oidclogin.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
 import { AuditLog } from './audit.js';
-import { DeployStore } from './deploys.js';
+import { createDeployStore } from './deploys.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
 import { createHttpApp } from './http.js';
@@ -39,7 +39,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   const log = logger.child({ component: 'control-plane' });
 
   const credentials = new CredentialStore(config);
-  const deploys = new DeployStore(config.dbFile);
+  const deploys = createDeployStore(config);
   // Track a provider's rotating RS256 keys when a JWKS URI is set; the cache
   // refreshes in the background so verification stays synchronous.
   const jwks = config.oidcJwksUri ? new JwksCache(config.oidcJwksUri) : undefined;
@@ -163,7 +163,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       stopLoki?.();
       agentWss.close();
       clientWss.close();
-      deploys.close();
+      void deploys.close();
       server.close(() => resolve());
     });
 

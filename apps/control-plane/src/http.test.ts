@@ -8,7 +8,7 @@ import { CommandBus } from './commands.js';
 import type { Config } from './config.js';
 import { mintHs256 } from './config.testutil.js';
 import type { Context } from './context.js';
-import { DeployStore } from './deploys.js';
+import { SqliteDeployStore } from './deploys.js';
 import { createHttpApp } from './http.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
@@ -45,6 +45,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     auditMax: 500,
     auditFile: '',
     dbFile: ':memory:',
+    databaseUrl: '',
     githubWebhookSecret: '',
     maxConnections: 1000,
     actionRatePerMin: 30,
@@ -77,7 +78,7 @@ function makeContext(config = makeConfig()): Context {
     commands: new CommandBus(1000),
     audit: new AuditLog(50),
     metrics: new Metrics(),
-    deploys: new DeployStore(),
+    deploys: new SqliteDeployStore(),
   };
 }
 

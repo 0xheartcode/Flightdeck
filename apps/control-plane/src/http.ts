@@ -70,10 +70,10 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
   //   /healthz - liveness: the process is up and serving.
   //   /readyz  - readiness: dependencies (the deploy store) are responsive.
   app.get('/healthz', (c) => c.json({ status: 'ok', version: '0.1.0' }));
-  app.get('/readyz', (c) => {
+  app.get('/readyz', async (c) => {
     try {
-      // A trivial query proves the SQLite handle is open and responsive.
-      deploys.list(undefined, 1);
+      // A trivial query proves the deploy store (SQLite or Postgres) is responsive.
+      await deploys.list(undefined, 1);
     } catch {
       return c.json({ status: 'not ready' }, 503);
     }
@@ -152,7 +152,7 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
       } catch {
         return c.json({ error: 'invalid payload' }, 400);
       }
-      if (deploy) correlateDeploy(ctx, deploy);
+      if (deploy) await correlateDeploy(ctx, deploy);
     }
     return c.json({ ok: true });
   });
@@ -201,14 +201,14 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
 
   app.get('/api/services', (c) => c.json({ services: store.listServices() }));
 
-  app.get('/api/services/:id', (c) => {
+  app.get('/api/services/:id', async (c) => {
     const id = c.req.param('id');
     const service = store.getService(id);
     if (!service) {
       return c.json({ error: 'not_found' }, 404);
     }
     const deploy = service.repo
-      ? deploys.latestForRepo(service.repo, service.environment)
+      ? await deploys.latestForRepo(service.repo, service.environment)
       : undefined;
     // Env values are secrets: mask them unless the caller has the reveal
     // permission. Keys stay visible either way so the UI can list what is set.
@@ -237,11 +237,11 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     return c.json({ lines });
   });
 
-  app.get('/api/deploys', (c) => {
+  app.get('/api/deploys', async (c) => {
     const repo = c.req.query('repo') || undefined;
     const limit = Number(c.req.query('limit'));
     return c.json({
-      deploys: deploys.list(repo, Number.isFinite(limit) && limit > 0 ? limit : undefined),
+      deploys: await deploys.list(repo, Number.isFinite(limit) && limit > 0 ? limit : undefined),
     });
   });
 
@@ -254,8 +254,8 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
 }
 
 /** Store a deploy and push it to the subscribers of every matching service. */
-function correlateDeploy(ctx: Context, deploy: DeployRecord): void {
-  ctx.deploys.record(deploy);
+async function correlateDeploy(ctx: Context, deploy: DeployRecord): Promise<void> {
+  await ctx.deploys.record(deploy);
   ctx.metrics.incDeploy(deploy.status);
   let matched = 0;
   for (const svc of ctx.store.listServices()) {

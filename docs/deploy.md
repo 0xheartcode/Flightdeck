@@ -139,6 +139,16 @@ Choose one for the browser surface (the agent always uses its own token):
   one origin (the single-domain reverse proxy above does this). See
   [security.md](security.md) for the full model.
 
+## High availability
+
+For more than one control-plane instance, set `FD_DATABASE_URL` to a shared
+Postgres and run several instances behind the load balancer, all pointed at the
+same database. They share the deploy history and correlation. Note live log
+streaming is still per-instance (an agent connects to one instance), so a shared
+message bus for cross-instance live fan-out is a later addition; durable state,
+health probes, and the audit file already work across instances. See
+[architecture.md](architecture.md#high-availability).
+
 ## Operations
 
 - **Health**: `GET /healthz` (liveness) and `GET /readyz` (readiness, checks the
