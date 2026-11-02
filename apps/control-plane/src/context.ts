@@ -2,6 +2,7 @@ import type { AuditLog } from './audit.js';
 import type { CommandBus } from './commands.js';
 import type { Config } from './config.js';
 import type { DeployStore } from './deploys.js';
+import type { KeyResolver } from './identity.js';
 import type { Metrics } from './metrics.js';
 import type { Store } from './store.js';
 
@@ -13,4 +14,6 @@ export interface Context {
   audit: AuditLog;
   metrics: Metrics;
   deploys: DeployStore;
+  /** JWKS key cache for RS256 verification, when a JWKS URI is configured. */
+  jwks?: KeyResolver;
 }

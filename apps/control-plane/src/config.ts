@@ -45,6 +45,8 @@ export interface Config {
   oidcHs256Secret: string;
   /** RS256 public key (PEM) for verifying JWTs. Setting it (or the HS256 secret) turns identity on. */
   oidcRs256PublicKey: string;
+  /** OIDC JWKS endpoint for RS256 keys (fetched and refreshed). Setting it turns identity on. */
+  oidcJwksUri: string;
   /** Claim holding the user's roles (dotted path allowed, e.g. `realm_access.roles`). */
   oidcRolesClaim: string;
   /** Roles permitted to trigger actions (restart, redeploy). */
@@ -118,6 +120,7 @@ export function loadConfig(): Config {
     oidcHs256Secret: process.env.FD_OIDC_HS256_SECRET ?? '',
     // Allow the PEM to be supplied with literal "\n" escapes (common in env files).
     oidcRs256PublicKey: (process.env.FD_OIDC_RS256_PUBLIC_KEY ?? '').replace(/\\n/g, '\n'),
+    oidcJwksUri: process.env.FD_OIDC_JWKS_URI ?? '',
     oidcRolesClaim: process.env.FD_OIDC_ROLES_CLAIM || 'roles',
     operatorRoles: list(process.env.FD_OPERATOR_ROLES),
     adminRoles: list(process.env.FD_ADMIN_ROLES),
@@ -128,7 +131,9 @@ export function loadConfig(): Config {
   // Identity (JWT) authenticates the browser when a verification key is set;
   // the single dashboard token is the fallback. "Unauthenticated" warnings only
   // apply when neither is configured.
-  const identityOn = Boolean(config.oidcHs256Secret || config.oidcRs256PublicKey);
+  const identityOn = Boolean(
+    config.oidcHs256Secret || config.oidcRs256PublicKey || config.oidcJwksUri,
+  );
   const log = logger.child({ component: 'config' });
   if (!config.dashboardToken && !identityOn) {
     log.warn(
