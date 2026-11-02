@@ -33,6 +33,14 @@ function config(overrides: Partial<Config> = {}): Config {
     oidcRolesClaim: 'roles',
     operatorRoles: [],
     adminRoles: [],
+    oidcClientId: '',
+    oidcClientSecret: '',
+    oidcAuthEndpoint: '',
+    oidcTokenEndpoint: '',
+    oidcRedirectUri: '',
+    oidcScopes: 'openid profile email',
+    sessionSecret: '',
+    webAppUrl: 'http://localhost:5173',
     ...overrides,
   };
 }

@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
 import { JwksCache, logIdentityConfig, verifyToken } from './identity.js';
+import { sessionToken } from './oidclogin.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
 import { AuditLog } from './audit.js';
@@ -102,6 +103,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
         pathname,
         headerToken,
         queryToken: searchParams.get('token') ?? undefined,
+        cookieToken: sessionToken(req.headers.cookie),
         origin: req.headers.origin,
       },
       config,

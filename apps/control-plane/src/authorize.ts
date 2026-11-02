@@ -8,6 +8,8 @@ export interface UpgradeContext {
   headerToken?: string | undefined;
   /** Token from the ?token= query param (browsers can't set WS headers). */
   queryToken?: string | undefined;
+  /** Token from the login session cookie, if the browser is signed in. */
+  cookieToken?: string | undefined;
   /** Origin header of the handshake, if any. */
   origin?: string | undefined;
 }
@@ -65,7 +67,7 @@ export function authorizeUpgrade(
     if (!originOk(ctx.origin, config.corsOrigin)) {
       return { ok: false, status: 403 };
     }
-    const presented = ctx.headerToken ?? ctx.queryToken;
+    const presented = ctx.headerToken ?? ctx.queryToken ?? ctx.cookieToken;
     if (identityEnabled(config)) {
       const principal = verifyClient ? verifyClient(presented) : null;
       return principal ? { ok: true, status: 101, principal } : { ok: false, status: 401 };
