@@ -31,6 +31,8 @@ export interface Config {
   auditFile: string;
   /** SQLite database file for deploys; ':memory:' (default) is ephemeral. */
   dbFile: string;
+  /** Postgres connection string for a shared, HA deploy store; overrides dbFile when set. */
+  databaseUrl: string;
   /** GitHub webhook HMAC secret; empty disables the webhook endpoint. */
   githubWebhookSecret: string;
   /** Max concurrent WebSocket connections (agents + browsers). */
@@ -132,6 +134,7 @@ export function loadConfig(): Config {
     auditMax: num(process.env.FD_AUDIT_MAX, 500),
     auditFile: process.env.FD_AUDIT_LOG_FILE ?? '',
     dbFile: process.env.FD_DB_FILE ?? ':memory:',
+    databaseUrl: process.env.FD_DATABASE_URL ?? '',
     githubWebhookSecret: process.env.FD_GITHUB_WEBHOOK_SECRET ?? '',
     maxConnections: num(process.env.FD_MAX_CONNECTIONS, 1000),
     actionRatePerMin: num(process.env.FD_ACTION_RATE_PER_MIN, 30),

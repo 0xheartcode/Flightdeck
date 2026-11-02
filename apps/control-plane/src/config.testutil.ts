@@ -19,6 +19,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     auditMax: 50,
     auditFile: '',
     dbFile: ':memory:',
+    databaseUrl: '',
     githubWebhookSecret: '',
     maxConnections: 1000,
     actionRatePerMin: 30,
