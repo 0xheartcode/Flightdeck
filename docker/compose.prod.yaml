@@ -1,0 +1,72 @@
+name: flightdeck-cd
+
+# Production stack: control plane + web UI only.
+#
+# The AGENT is NOT run here. Run it on each host with the systemd unit in
+# deploy/ (against a rootless Podman socket the same user owns), never as a
+# container with the Docker socket mounted. See docs/deploy.md.
+#
+# Secrets come from a .env file next to this one (docker/.env) or the shell
+# environment. Ports bind to 127.0.0.1: put a TLS-terminating reverse proxy
+# (Caddy, nginx, Traefik) in front and expose that, not these ports.
+#
+#   docker compose -f docker/compose.prod.yaml --env-file docker/.env up -d --build
+
+services:
+  control-plane:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.control-plane
+    environment:
+      FD_CONTROL_PLANE_HOST: 0.0.0.0
+      FD_CONTROL_PLANE_PORT: '4000'
+      # Required: agents cannot authenticate without it.
+      FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:?set FD_AGENT_TOKEN}
+      # Required in production: the browser origin allowed to call the API.
+      FD_CORS_ORIGIN: ${FD_CORS_ORIGIN:?set FD_CORS_ORIGIN to your UI origin}
+      # Authenticate the browser: set a dashboard token, or configure OIDC.
+      FD_DASHBOARD_TOKEN: ${FD_DASHBOARD_TOKEN:-}
+      FD_OIDC_HS256_SECRET: ${FD_OIDC_HS256_SECRET:-}
+      FD_OIDC_RS256_PUBLIC_KEY: ${FD_OIDC_RS256_PUBLIC_KEY:-}
+      FD_OIDC_ISSUER: ${FD_OIDC_ISSUER:-}
+      FD_OIDC_AUDIENCE: ${FD_OIDC_AUDIENCE:-}
+      FD_OIDC_ROLES_CLAIM: ${FD_OIDC_ROLES_CLAIM:-roles}
+      FD_OPERATOR_ROLES: ${FD_OPERATOR_ROLES:-}
+      FD_ADMIN_ROLES: ${FD_ADMIN_ROLES:-}
+      FD_ENABLE_ACTIONS: ${FD_ENABLE_ACTIONS:-false}
+      # Persist deploys and the audit trail across restarts (see the volume).
+      FD_DB_FILE: /data/flightdeck.db
+      FD_AUDIT_LOG_FILE: /data/audit.jsonl
+      FD_GITHUB_WEBHOOK_SECRET: ${FD_GITHUB_WEBHOOK_SECRET:-}
+    volumes:
+      - flightdeck-data:/data
+    ports:
+      - '127.0.0.1:4000:4000'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+      args:
+        # The control plane URL the BROWSER uses (public), baked at build time.
+        VITE_FD_API_URL: ${FD_PUBLIC_API_URL:?set FD_PUBLIC_API_URL to the control plane's public URL}
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  flightdeck-data:

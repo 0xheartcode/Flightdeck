@@ -93,6 +93,10 @@ One command runs the whole quality gate across both stacks, and CI runs exactly 
 just check          # pnpm check (format, lint, typecheck, test, build) + cargo fmt/clippy/test
 ```
 
+## Deploying
+
+For production, run the control plane and web UI from `docker/compose.prod.yaml` (bound to localhost behind a TLS reverse proxy, with a persistent data volume) and run the agent on each host as a non-root systemd service against a rootless Podman socket. The full walkthrough, including a reverse-proxy example and the authentication options, is in [docs/deploy.md](docs/deploy.md). Liveness and readiness are at `/healthz` and `/readyz`.
+
 ## Security
 
 The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production. Agents authenticate with a bearer token (sent as a header, compared in constant time, `wss://` supported): use a single `FD_AGENT_TOKEN`, or give each agent its own credential via `FD_AGENT_TOKENS` / `FD_AGENT_TOKENS_FILE` so one can be revoked individually (the control plane reloads the file and drops the revoked connection). The browser API and log stream are gated by `FD_DASHBOARD_TOKEN` when set, or by per-user identity: set an OIDC key (`FD_OIDC_HS256_SECRET` or `FD_OIDC_RS256_PUBLIC_KEY`) to require a verified JWT, map roles to permissions (`FD_OPERATOR_ROLES`, `FD_ADMIN_ROLES`), and the audit log then records the user. CORS is restricted to `FD_CORS_ORIGIN` (not `*`), and the `/stream` upgrade checks `Origin`. Both WebSocket servers cap frame size and the registry is bounded. See [docs/security.md](docs/security.md) for the full threat model and knobs.

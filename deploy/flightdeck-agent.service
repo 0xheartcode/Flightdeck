@@ -1,0 +1,43 @@
+# Flightdeck-CD agent, run as a static binary on each monitored host.
+#
+# Install:
+#   sudo useradd --system --create-home --shell /usr/sbin/nologin flightdeck
+#   sudo install -m 0755 target/release/flightdeck-agent /usr/local/bin/flightdeck-agent
+#   sudo install -D -m 0600 deploy/agent.env.example /etc/flightdeck/agent.env   # then edit it
+#   sudo install -m 0644 deploy/flightdeck-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now flightdeck-agent
+#
+# For a rootless Podman socket the agent user owns, see docs/deploy.md: enable
+# lingering and point FD_DOCKER_HOST at /run/user/<uid>/podman/podman.sock.
+
+[Unit]
+Description=Flightdeck-CD agent
+Documentation=https://github.com/0xheartcode/flightdeck-cd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A dedicated non-root user. For rootless Podman this user owns the socket.
+User=flightdeck
+Group=flightdeck
+EnvironmentFile=/etc/flightdeck/agent.env
+ExecStart=/usr/local/bin/flightdeck-agent
+Restart=always
+RestartSec=5s
+
+# Hardening: the agent only needs the container socket and the network.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
