@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Environment variable editing: an admin (the reveal permission) can edit a
+  service's env from the UI. The control plane sends a `set_env` command and the
+  agent recreates the container with the new environment (no image re-pull),
+  the same safe recreate path as redeploy (old container renamed aside, rolled
+  back on failure). The edit is audited and requires actions to be enabled.
 - OIDC JWKS support: set `FD_OIDC_JWKS_URI` and the control plane fetches and
   refreshes the provider's RS256 signing keys in the background, matching each
   token to a key by its `kid`. This makes identity work with providers that
