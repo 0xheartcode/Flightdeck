@@ -56,7 +56,7 @@ export interface Config {
 }
 
 /** Split a comma or newline separated role list into trimmed, non-empty names. */
-function list(value: string | undefined): string[] {
+export function parseList(value: string | undefined): string[] {
   return (value ?? '')
     .split(/[\n,]+/)
     .map((s) => s.trim())
@@ -122,8 +122,8 @@ export function loadConfig(): Config {
     oidcRs256PublicKey: (process.env.FD_OIDC_RS256_PUBLIC_KEY ?? '').replace(/\\n/g, '\n'),
     oidcJwksUri: process.env.FD_OIDC_JWKS_URI ?? '',
     oidcRolesClaim: process.env.FD_OIDC_ROLES_CLAIM || 'roles',
-    operatorRoles: list(process.env.FD_OPERATOR_ROLES),
-    adminRoles: list(process.env.FD_ADMIN_ROLES),
+    operatorRoles: parseList(process.env.FD_OPERATOR_ROLES),
+    adminRoles: parseList(process.env.FD_ADMIN_ROLES),
   };
 
   // Agent-credential presence is validated by the CredentialStore, which
