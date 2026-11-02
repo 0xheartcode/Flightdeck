@@ -8,7 +8,7 @@ import { logger } from './logger.js';
  * handler has already verified the bearer token before this runs.
  */
 export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: string): void {
-  const { store, commands, metrics, loki } = ctx;
+  const { store, commands, metrics, loki, bus } = ctx;
   // Services announced over this connection. Used to remove them when the
   // agent disconnects (a dead host must not linger as a false "running"), and
   // to stop one connection from reporting for services it did not announce.
@@ -50,6 +50,8 @@ export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: st
         store.upsertService(service);
         store.setEnv(service.id, env);
         commands.registerService(service.id, sendCommand);
+        // Mirror the service (without its secret env) to the other instances.
+        bus.publish({ kind: 'service', service });
         break;
       }
       case 'service_gone':
@@ -57,20 +59,30 @@ export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: st
         owned.delete(msg.serviceId);
         store.removeService(msg.serviceId);
         commands.unregisterService(msg.serviceId, sendCommand);
+        bus.publish({ kind: 'service_gone', serviceId: msg.serviceId });
         break;
       case 'status':
         if (!owned.has(msg.serviceId)) break;
         store.setStatus(msg.serviceId, msg.state, msg.exitCode, msg.ts);
+        bus.publish({
+          kind: 'status',
+          serviceId: msg.serviceId,
+          state: msg.state,
+          exitCode: msg.exitCode,
+          ts: msg.ts,
+        });
         break;
       case 'log':
         if (!owned.has(msg.log.serviceId)) break;
         store.appendLog(msg.log);
         metrics.incLogLines();
         loki?.push(msg.log);
+        bus.publish({ kind: 'log', log: msg.log });
         break;
       case 'stats':
         if (!owned.has(msg.stats.serviceId)) break;
         store.setStats(msg.stats);
+        bus.publish({ kind: 'stats', stats: msg.stats });
         break;
       case 'command_result':
         commands.resolve(msg.id, msg.ok, msg.error);
