@@ -264,6 +264,8 @@ async function correlateDeploy(ctx: Context, deploy: DeployRecord): Promise<void
   for (const svc of ctx.store.listServices()) {
     if (svc.repo && svc.repo === deploy.repo) {
       ctx.store.pushToService(svc.id, { type: 'deploy', serviceId: svc.id, deploy });
+      // Let other instances push this deploy to their own subscribers.
+      ctx.bus.publish({ kind: 'deploy', serviceId: svc.id, deploy });
       matched += 1;
     }
   }
