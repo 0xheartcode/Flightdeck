@@ -69,6 +69,15 @@ pub fn parse_env(entries: &[String]) -> Vec<EnvVar> {
         .collect()
 }
 
+/// Map structured env vars to Docker's "KEY=VALUE" strings (the shape the API's
+/// `Env` array expects). Pure, so it is unit-tested. Values are secrets and are
+/// never logged here or by callers.
+pub fn env_pairs(env: &[EnvVar]) -> Vec<String> {
+    env.iter()
+        .map(|v| format!("{}={}", v.key, v.value))
+        .collect()
+}
+
 /// List containers carrying `<label>=true`.
 ///
 /// When `collect_env` is true, each container's environment variables are read
@@ -318,10 +327,7 @@ pub async fn restart(docker: &Docker, container_id: &str) -> anyhow::Result<()> 
 /// primary network; multi-network or compose-managed containers may need
 /// manual handling.
 pub async fn redeploy(docker: &Docker, container_id: &str) -> anyhow::Result<()> {
-    use bollard::query_parameters::{
-        CreateContainerOptionsBuilder, CreateImageOptionsBuilder, RemoveContainerOptionsBuilder,
-        RenameContainerOptionsBuilder, StartContainerOptions,
-    };
+    use bollard::query_parameters::CreateImageOptionsBuilder;
 
     let inspect = docker.inspect_container(container_id, None).await?;
     let config = inspect
@@ -332,14 +338,9 @@ pub async fn redeploy(docker: &Docker, container_id: &str) -> anyhow::Result<()>
         .image
         .clone()
         .ok_or_else(|| anyhow::anyhow!("container has no image"))?;
-    let name = inspect
-        .name
-        .as_deref()
-        .map(|n| n.trim_start_matches('/').to_string())
-        .filter(|n| !n.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("container has no name"))?;
+    let name = container_name(&inspect)?;
 
-    // 1. Pull the image (picks up a newer image for the same tag).
+    // Pull the image (picks up a newer image for the same tag).
     let (from_image, tag) = split_image_ref(&image);
     let mut opts = CreateImageOptionsBuilder::default().from_image(&from_image);
     if let Some(tag) = &tag {
@@ -350,31 +351,80 @@ pub async fn redeploy(docker: &Docker, container_id: &str) -> anyhow::Result<()>
         item?;
     }
 
-    // 2. Build the create body from the existing config + host config.
+    // Recreate from the existing config + host config (image already pulled).
     let body = create_body_from(&config, inspect.host_config.as_ref())?;
+    recreate(docker, container_id, &name, body).await
+}
 
-    // 3. Move the old container aside so its name is free (rollback target).
+/// Recreate a container with a replaced environment, keeping its image and every
+/// other config field. Unlike `redeploy` this does NOT pull the image: it reuses
+/// the image already referenced by the container. The old container is renamed
+/// aside and restored if the new one fails to start. Env values are secrets and
+/// are never logged.
+pub async fn set_env(docker: &Docker, container_id: &str, env: &[EnvVar]) -> anyhow::Result<()> {
+    let inspect = docker.inspect_container(container_id, None).await?;
+    let mut config = inspect
+        .config
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("container has no config to recreate"))?;
+    let name = container_name(&inspect)?;
+
+    // Replace the environment only; the image, cmd, host config and everything
+    // else survive the serde round-trip in create_body_from untouched.
+    config.env = Some(env_pairs(env));
+
+    let body = create_body_from(&config, inspect.host_config.as_ref())?;
+    recreate(docker, container_id, &name, body).await
+}
+
+/// Extract a container's name without the leading '/'. Errors if it is missing
+/// or empty, since the recreate dance needs it to reclaim the name.
+fn container_name(inspect: &bollard::models::ContainerInspectResponse) -> anyhow::Result<String> {
+    inspect
+        .name
+        .as_deref()
+        .map(|n| n.trim_start_matches('/').to_string())
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("container has no name"))
+}
+
+/// Recreate a container in place from a prepared create body: rename the old one
+/// aside so its name is free, create and start the new one under that name, and
+/// on success remove the old. Any create/start failure rolls the old container
+/// back. Shared by `redeploy` and `set_env` so the recreate steps live once.
+async fn recreate(
+    docker: &Docker,
+    old_id: &str,
+    name: &str,
+    body: bollard::models::ContainerCreateBody,
+) -> anyhow::Result<()> {
+    use bollard::query_parameters::{
+        CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder,
+        RenameContainerOptionsBuilder, StartContainerOptions,
+    };
+
+    // Move the old container aside so its name is free (rollback target).
     let backup = format!("{name}-fd-prev-{}", now_ms());
     docker
         .rename_container(
-            container_id,
+            old_id,
             RenameContainerOptionsBuilder::default()
                 .name(&backup)
                 .build(),
         )
         .await?;
 
-    // 4. Create and start the new container; roll back on any failure.
+    // Create and start the new container; roll back on any failure.
     let create = docker
         .create_container(
-            Some(CreateContainerOptionsBuilder::default().name(&name).build()),
+            Some(CreateContainerOptionsBuilder::default().name(name).build()),
             body,
         )
         .await;
     let new_id = match create {
         Ok(resp) => resp.id,
         Err(err) => {
-            rollback(docker, container_id, &name).await;
+            rollback(docker, old_id, name).await;
             return Err(anyhow::anyhow!("create failed: {err}"));
         }
     };
@@ -388,14 +438,14 @@ pub async fn redeploy(docker: &Docker, container_id: &str) -> anyhow::Result<()>
                 Some(RemoveContainerOptionsBuilder::default().force(true).build()),
             )
             .await;
-        rollback(docker, container_id, &name).await;
+        rollback(docker, old_id, name).await;
         return Err(anyhow::anyhow!("start failed: {err}"));
     }
 
-    // 5. Success: remove the old (renamed) container.
+    // Success: remove the old (renamed) container.
     let _ = docker
         .remove_container(
-            container_id,
+            old_id,
             Some(RemoveContainerOptionsBuilder::default().force(true).build()),
         )
         .await;
@@ -483,7 +533,22 @@ fn truncate(line: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{cpu_percent, parse_env, split_image_ref, truncate, unique_service_id};
+    use super::{cpu_percent, env_pairs, parse_env, split_image_ref, truncate, unique_service_id};
+    use crate::protocol::EnvVar;
+
+    #[test]
+    fn env_pairs_formats_key_equals_value() {
+        let env = vec![EnvVar {
+            key: "A".to_string(),
+            value: "1".to_string(),
+        }];
+        assert_eq!(env_pairs(&env), vec!["A=1".to_string()]);
+    }
+
+    #[test]
+    fn env_pairs_of_empty_slice_is_empty() {
+        assert!(env_pairs(&[]).is_empty());
+    }
 
     #[test]
     fn parse_env_splits_on_first_equals_only() {
