@@ -62,6 +62,17 @@ Mitigations, strongest first:
   fetched and refreshed in the background and matched to a token by its `kid`,
   so rotating keys work; verification itself stays synchronous, reading an
   in-memory key cache rather than fetching per request.
+- Browser login (optional): configure `FD_OIDC_CLIENT_ID`, the provider's
+  authorization and token endpoints, a redirect URI, and `FD_SESSION_SECRET` to
+  turn on the authorization-code + PKCE flow. `/auth/login` sends the browser to
+  the provider with a signed state cookie carrying the PKCE verifier;
+  `/auth/callback` checks the state, exchanges the code at the token endpoint,
+  verifies the returned id_token (same checks as above), and stores it in an
+  HttpOnly, SameSite=Lax session cookie (Secure when the redirect URI is https).
+  `/api` and `/stream` accept that cookie as well as a bearer token. The session
+  is the provider's own JWT, so it self-expires; `/auth/logout` clears it. Serve
+  the UI and control plane on one origin (see the deploy guide) so the cookie is
+  sent.
 - Roles (read from `FD_OIDC_ROLES_CLAIM`, a dotted path is allowed) map to
   permissions: a role in `FD_OPERATOR_ROLES` may trigger actions, a role in
   `FD_ADMIN_ROLES` may additionally reveal env values, and every authenticated
