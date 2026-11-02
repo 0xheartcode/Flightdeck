@@ -107,4 +107,53 @@ describe('Store', () => {
     store.removeService('api');
     expect(store.getEnv('api')).toBeUndefined();
   });
+
+  it('fans out in isolation at scale and stops cleanly on unsubscribe', () => {
+    const store = new Store(5000);
+    const N = 100;
+    const perService = 50;
+    const counts = new Map<string, number>();
+    const unsubs: Array<() => void> = [];
+    for (let i = 0; i < N; i++) {
+      const id = `svc-${i}`;
+      store.upsertService(service(id));
+      counts.set(id, 0);
+      unsubs.push(
+        store.subscribe(id, (m) => {
+          if (m.type === 'log') counts.set(id, (counts.get(id) ?? 0) + 1);
+        }),
+      );
+    }
+
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < perService; j++) {
+        store.appendLog(log(`svc-${i}`, `line-${j}`));
+      }
+    }
+    // Each subscriber received exactly its own service's logs, no cross-talk.
+    for (let i = 0; i < N; i++) {
+      expect(counts.get(`svc-${i}`)).toBe(perService);
+    }
+
+    // After unsubscribing every listener, further logs reach nobody.
+    for (const unsub of unsubs) unsub();
+    for (let i = 0; i < N; i++) {
+      store.appendLog(log(`svc-${i}`, 'after-unsub'));
+    }
+    for (let i = 0; i < N; i++) {
+      expect(counts.get(`svc-${i}`)).toBe(perService);
+    }
+  });
+
+  it('delivers one service event to all of its subscribers', () => {
+    const store = new Store(10);
+    store.upsertService(service('api'));
+    let a = 0;
+    let b = 0;
+    store.subscribe('api', () => (a += 1));
+    store.subscribe('api', () => (b += 1));
+    store.appendLog(log('api', 'hello'));
+    expect(a).toBe(1);
+    expect(b).toBe(1);
+  });
 });
