@@ -143,11 +143,12 @@ Choose one for the browser surface (the agent always uses its own token):
 
 For more than one control-plane instance, set `FD_DATABASE_URL` to a shared
 Postgres and run several instances behind the load balancer, all pointed at the
-same database. They share the deploy history and correlation. Note live log
-streaming is still per-instance (an agent connects to one instance), so a shared
-message bus for cross-instance live fan-out is a later addition; durable state,
-health probes, and the audit file already work across instances. See
-[architecture.md](architecture.md#high-availability).
+same database. They share the deploy history and correlation, and live state
+too: a Postgres LISTEN/NOTIFY bus mirrors the service list, status, logs, stats,
+and deploys between instances and routes commands across them, so a browser on
+any instance sees the whole fleet and can act on any service regardless of which
+instance its agent connected to. No extra infrastructure beyond the Postgres you
+already configured. See [architecture.md](architecture.md#high-availability).
 
 ## Operations
 

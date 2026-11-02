@@ -9,6 +9,7 @@ import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
 import { JwksCache, logIdentityConfig, verifyToken } from './identity.js';
 import { LokiClient, lokiEnabled } from './loki.js';
+import { createBus } from './bus.js';
 import { sessionToken } from './oidclogin.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
@@ -47,16 +48,58 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   // Ship logs to Loki for durable storage and search, when configured.
   const loki = lokiEnabled(config) ? new LokiClient(config.lokiUrl, config.lokiTenant) : undefined;
   const stopLoki = loki?.start();
+  // Inter-instance fan-out bus for HA (no-op unless a database is configured).
+  const bus = createBus(config);
+  const commands = new CommandBus(config.actionTimeoutMs);
+  commands.setBus(bus);
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
-    commands: new CommandBus(config.actionTimeoutMs),
+    commands,
     audit: new AuditLog(config.auditMax, config.auditFile || undefined),
     metrics: new Metrics(),
     deploys,
     jwks,
     loki,
+    bus,
   };
+
+  // Apply events from other instances to the local store (and thus to local
+  // browsers), and route cross-instance commands. These never re-publish, so
+  // there is no loop.
+  bus.onMessage((msg) => {
+    switch (msg.kind) {
+      case 'service':
+        ctx.store.upsertService(msg.service);
+        break;
+      case 'service_gone':
+        ctx.store.removeService(msg.serviceId);
+        break;
+      case 'status':
+        ctx.store.setStatus(msg.serviceId, msg.state, msg.exitCode, msg.ts);
+        break;
+      case 'log':
+        ctx.store.appendLog(msg.log);
+        break;
+      case 'stats':
+        ctx.store.setStats(msg.stats);
+        break;
+      case 'deploy':
+        ctx.store.pushToService(msg.serviceId, {
+          type: 'deploy',
+          serviceId: msg.serviceId,
+          deploy: msg.deploy,
+        });
+        break;
+      case 'command':
+        ctx.commands.handleBusCommand(msg);
+        break;
+      case 'command_result':
+        ctx.commands.resolve(msg.id, msg.ok, msg.error);
+        break;
+    }
+  });
+  bus.start();
 
   log.info(
     { credentials: credentials.size, actions: config.actionsEnabled },
@@ -161,6 +204,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       clearInterval(revocationTimer);
       stopJwks?.();
       stopLoki?.();
+      void bus.close();
       agentWss.close();
       clientWss.close();
       void deploys.close();

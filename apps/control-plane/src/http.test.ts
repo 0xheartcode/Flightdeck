@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import { unsign } from './oidclogin.js';
 import { AuditLog } from './audit.js';
+import { nullBus } from './bus.js';
 import { CommandBus } from './commands.js';
 import type { Config } from './config.js';
 import { mintHs256 } from './config.testutil.js';
@@ -79,6 +80,7 @@ function makeContext(config = makeConfig()): Context {
     audit: new AuditLog(50),
     metrics: new Metrics(),
     deploys: new SqliteDeployStore(),
+    bus: nullBus,
   };
 }
 

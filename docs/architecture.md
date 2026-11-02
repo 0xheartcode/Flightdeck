@@ -98,11 +98,15 @@ The deploy store is pluggable so the durable state can be shared. Set
 `FD_DATABASE_URL` and the control plane uses Postgres instead of SQLite; run
 several instances behind a load balancer, all pointed at the same database, and
 they share deploy history and correlation (a webhook to one instance is visible
-from another). The in-memory service registry and the log ring stay per-instance
-(an agent connects to one instance and its live logs are served from there), so
-full cross-instance live streaming needs a shared message bus, which is the next
-HA step. Durable deploy state, health probes, and the audit file already work
-multi-instance today.
+from another). Live state is shared too: a Postgres LISTEN/NOTIFY bus (`bus.ts`)
+mirrors every live event (service list, status, logs, stats, deploys) between
+instances and routes commands across them, so a browser on any instance sees the
+whole fleet and can act on a service whose agent is connected to a different
+instance. Each instance still holds its own agents' sockets; the bus carries the
+events, so no agent or browser needs to be pinned to a particular instance. (At
+very large fleets, moving the high-volume log stream to per-service channels or a
+dedicated bus would reduce cross-instance chatter.) A single instance uses a
+no-op bus and is unaffected.
 
 ## Environment surfacing
 
@@ -118,7 +122,7 @@ recreate path, without an image re-pull), gated on the reveal permission and on
 actions being enabled, and audited.
 
 ## Roadmap
-- **HA live fan-out**: a shared message bus so live logs and commands cross
-  instances (the durable store is already shared via Postgres, see above).
-- **Kubernetes runtime**: a kube-backend for the agent (Docker/Podman and
-  systemd are supported; see the agent section).
+
+The core is feature complete (see CHANGELOG.md). Natural next steps as usage
+demands them: moving the high-volume HA log stream to per-service channels or a
+dedicated bus at large scale, and additional agent runtimes.

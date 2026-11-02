@@ -1,4 +1,5 @@
 import type { AuditLog } from './audit.js';
+import type { Bus } from './bus.js';
 import type { CommandBus } from './commands.js';
 import type { Config } from './config.js';
 import type { DeployStore } from './deploys.js';
@@ -19,4 +20,6 @@ export interface Context {
   jwks?: KeyResolver;
   /** Durable log shipping and search, when a Loki URL is configured. */
   loki?: LokiClient;
+  /** Inter-instance fan-out bus for HA (no-op when single-instance). */
+  bus: Bus;
 }
