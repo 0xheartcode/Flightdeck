@@ -358,4 +358,88 @@ describe('control plane integration', () => {
 
     agent.close();
   });
+
+  it('edits env via set_env, gated on the admin role', async () => {
+    const SECRET = 'setenv-secret';
+    cp = startControlPlane(
+      testConfig({ oidcHs256Secret: SECRET, operatorRoles: ['operator'], adminRoles: ['admin'] }),
+    );
+    const port = await cp.listening;
+
+    const agent = await connectAgent(port, 'host-a');
+    const agentMsgs = collect(agent);
+    agent.on('message', (data) => {
+      const m = JSON.parse(data.toString()) as Msg;
+      if (m.type === 'command') {
+        agent.send(JSON.stringify({ v, type: 'command_result', id: m.id, ok: true }));
+      }
+    });
+    agent.send(
+      JSON.stringify({
+        v,
+        type: 'service',
+        service: {
+          id: 'svc',
+          name: 'svc',
+          image: 'img',
+          containerId: 'c',
+          state: 'running',
+          host: 'host-a',
+          createdAt: 0,
+          env: [{ key: 'A', value: '1' }],
+        },
+      }),
+    );
+
+    const connect = async (roles: string[]): Promise<[WebSocket, Msg[]]> => {
+      const token = mintHs256({ sub: roles.join(), roles, exp: future }, SECRET);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/stream?token=${token}`);
+      const msgs = collect(ws);
+      await open(ws);
+      await waitFor(() =>
+        msgs.find(
+          (m) =>
+            m.type === 'services' &&
+            (m.services as Array<{ id: string }>).some((s) => s.id === 'svc'),
+        ),
+      );
+      return [ws, msgs];
+    };
+
+    // An operator (no admin role) cannot edit env.
+    const [op, opMsgs] = await connect(['operator']);
+    op.send(JSON.stringify({ type: 'set_env', serviceId: 'svc', env: [{ key: 'A', value: '2' }] }));
+    const denied = await waitFor(() => opMsgs.find((m) => m.type === 'action_result'));
+    expect(denied.ok).toBe(false);
+    expect(denied.error).toBe('forbidden: admin role required');
+
+    // An admin can: the agent receives a set_env command with the new env.
+    const next = [
+      { key: 'A', value: '2' },
+      { key: 'B', value: 'x' },
+    ];
+    const [admin, adminMsgs] = await connect(['admin']);
+    admin.send(JSON.stringify({ type: 'set_env', serviceId: 'svc', env: next }));
+    const ok = await waitFor(() =>
+      adminMsgs.find((m) => m.type === 'action_result' && m.action === 'set_env'),
+    );
+    expect(ok.ok).toBe(true);
+    const cmd = await waitFor(() =>
+      agentMsgs.find((m) => m.type === 'command' && m.action === 'set_env'),
+    );
+    expect(cmd.env).toEqual(next);
+
+    // The API reflects the new env to the admin.
+    const token = mintHs256({ sub: 'ad', roles: ['admin'], exp: future }, SECRET);
+    const detail = (await (
+      await fetch(`http://127.0.0.1:${port}/api/services/svc`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).json()) as { env: unknown };
+    expect(detail.env).toEqual(next);
+
+    op.close();
+    admin.close();
+    agent.close();
+  });
 });
