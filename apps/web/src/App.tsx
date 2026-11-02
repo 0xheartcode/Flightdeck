@@ -14,8 +14,17 @@ export function App() {
   const { data: me, error: meError } = useMe();
   const { data: services = [], isLoading, isError, error: servicesError } = useServices();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { logs, connected, stats, status, actionResult, actionPending, deploy, sendAction } =
-    useLogStream(selectedId);
+  const {
+    logs,
+    connected,
+    stats,
+    status,
+    actionResult,
+    actionPending,
+    deploy,
+    sendAction,
+    sendSetEnv,
+  } = useLogStream(selectedId);
 
   // A 401 means identity is on but we are not signed in (the /api/me 401 hides
   // the identityEnabled flag until a valid token is supplied).
@@ -23,6 +32,7 @@ export function App() {
   const identityEnabled = me?.identityEnabled ?? unauthorized;
   const authenticated = identityEnabled ? Boolean(me?.subject) : true;
   const canAct = !identityEnabled || (me?.permissions.includes('act') ?? false);
+  const canEdit = !identityEnabled || (me?.permissions.includes('reveal') ?? false);
 
   const selected = services.find((s) => s.id === selectedId) ?? null;
 
@@ -59,7 +69,13 @@ export function App() {
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {selected ? (
             <>
-              <EnvPanel serviceId={selected.id} />
+              <EnvPanel
+                serviceId={selected.id}
+                canEdit={canEdit}
+                onSave={sendSetEnv}
+                actionResult={actionResult}
+                actionPending={actionPending}
+              />
               <div className="min-h-0 flex-1">
                 <LogViewer
                   serviceName={selected.name}

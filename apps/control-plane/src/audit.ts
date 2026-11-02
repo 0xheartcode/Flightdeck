@@ -1,12 +1,12 @@
 import { appendFileSync } from 'node:fs';
-import type { ActionKind } from '@flightdeck/protocol';
+import type { CommandAction } from '@flightdeck/protocol';
 import { logger } from './logger.js';
 
 const log = logger.child({ component: 'audit' });
 
 export interface AuditEntry {
   ts: number;
-  action: ActionKind;
+  action: CommandAction;
   serviceId: string;
   /** Who triggered it (client address/identifier). */
   actor: string;

@@ -68,6 +68,20 @@ describe('protocol', () => {
     ).toThrow();
   });
 
+  it('parses a set_env client message with its env payload', () => {
+    const msg = parseClientMessage(
+      JSON.stringify({
+        type: 'set_env',
+        serviceId: 'api',
+        env: [{ key: 'A', value: '1' }],
+      }),
+    );
+    expect(msg.type).toBe('set_env');
+    if (msg.type === 'set_env') {
+      expect(msg.env).toEqual([{ key: 'A', value: '1' }]);
+    }
+  });
+
   it('parses an agent command_result', () => {
     const msg = parseAgentMessage(
       JSON.stringify({ v: PROTOCOL_VERSION, type: 'command_result', id: 'c1', ok: true }),

@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { PROTOCOL_VERSION, type ActionKind, type ServerCommand } from '@flightdeck/protocol';
+import {
+  PROTOCOL_VERSION,
+  type CommandAction,
+  type EnvVar,
+  type ServerCommand,
+} from '@flightdeck/protocol';
 
 export interface CommandOutcome {
   ok: boolean;
@@ -31,7 +36,12 @@ export class CommandBus {
     }
   }
 
-  dispatch(serviceId: string, action: ActionKind, containerId: string): Promise<CommandOutcome> {
+  dispatch(
+    serviceId: string,
+    action: CommandAction,
+    containerId: string,
+    env?: EnvVar[],
+  ): Promise<CommandOutcome> {
     const send = this.senders.get(serviceId);
     if (!send) {
       return Promise.resolve({ ok: false, error: 'no connected agent for this service' });
@@ -47,7 +57,7 @@ export class CommandBus {
         clearTimeout(timer);
         resolve(outcome);
       });
-      send({ v: PROTOCOL_VERSION, type: 'command', id, action, serviceId, containerId });
+      send({ v: PROTOCOL_VERSION, type: 'command', id, action, serviceId, containerId, env });
     });
   }
 

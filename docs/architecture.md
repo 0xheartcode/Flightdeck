@@ -91,7 +91,10 @@ and reports its env vars to the control plane. The control plane strips env from
 the registry it broadcasts, holds it in a separate map, and serves it only at
 `GET /api/services/:id` with values masked. A caller with the reveal permission
 (an admin role, or any caller in legacy single-token mode) sees raw values; keys
-are always visible. Values are never logged.
+are always visible. Values are never logged. An admin can also edit env: a
+`set_env` command recreates the container with the new environment (the redeploy
+recreate path, without an image re-pull), gated on the reveal permission and on
+actions being enabled, and audited.
 
 ## Roadmap
 - **HA / multi-instance**: a durable, shared store behind the control plane (the
