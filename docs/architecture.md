@@ -81,9 +81,21 @@ persists it in SQLite (`DeployStore`, file via `FD_DB_FILE`, in-memory by
 default). A deploy is correlated to a service by the operator-provided
 `flightdeck.repo` label (and optional `flightdeck.environment`): matching
 services get the deploy pushed to their subscribers, and a browser is sent the
-latest deploy for a service the moment it subscribes. The `DeployStore`
-interface is intentionally small so a Postgres implementation can replace it for
-HA without touching callers.
+latest deploy for a service the moment it subscribes. `DeployStore` is a small
+async interface with two backends: SQLite (`SqliteDeployStore`, default) and
+Postgres (`PgDeployStore`, selected by `FD_DATABASE_URL`) for HA (see below).
+
+## High availability
+
+The deploy store is pluggable so the durable state can be shared. Set
+`FD_DATABASE_URL` and the control plane uses Postgres instead of SQLite; run
+several instances behind a load balancer, all pointed at the same database, and
+they share deploy history and correlation (a webhook to one instance is visible
+from another). The in-memory service registry and the log ring stay per-instance
+(an agent connects to one instance and its live logs are served from there), so
+full cross-instance live streaming needs a shared message bus, which is the next
+HA step. Durable deploy state, health probes, and the audit file already work
+multi-instance today.
 
 ## Environment surfacing
 
@@ -99,7 +111,6 @@ recreate path, without an image re-pull), gated on the reveal permission and on
 actions being enabled, and audited.
 
 ## Roadmap
-- **HA / multi-instance**: a durable, shared store behind the control plane (the
-  `DeployStore` seam already allows a Postgres backend) so more than one instance
-  can run.
+- **HA live fan-out**: a shared message bus so live logs and commands cross
+  instances (the durable store is already shared via Postgres, see above).
 - **Multi-runtime**: systemd and Kubernetes beyond Docker/Podman.
