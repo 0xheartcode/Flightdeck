@@ -17,7 +17,9 @@ const WEB_PORT = 4310;
 const TOKEN = 'e2e-token';
 const CP_URL = `http://127.0.0.1:${CP_PORT}`;
 
-// 1. Build the control plane and the web bundle (pointed at the test CP).
+// 1. Build the shared protocol first (both apps depend on its dist), then the
+// control plane and the web bundle (pointed at the test control plane).
+execSync('pnpm --filter @flightdeck/protocol build', { cwd: repoRoot, stdio: 'inherit' });
 execSync('pnpm --filter @flightdeck/control-plane build', { cwd: repoRoot, stdio: 'inherit' });
 execSync('pnpm --filter @flightdeck/web build', {
   cwd: repoRoot,
