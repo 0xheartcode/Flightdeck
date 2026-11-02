@@ -66,6 +66,12 @@ demo:
 demo-down:
     docker compose -f docker/compose.yaml down -v
 
+# Browser end-to-end smoke (Playwright). Separate from `check` because it builds
+# both apps and needs a browser: run `pnpm --filter @flightdeck/web exec playwright
+# install chromium` once, then `just e2e`.
+e2e:
+    pnpm --filter @flightdeck/web e2e
+
 # ---------------------------------------------------------------------------
 # Prerequisite checker
 # ---------------------------------------------------------------------------
