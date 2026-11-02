@@ -1,5 +1,10 @@
 import { WebSocket } from 'ws';
-import { parseClientMessage, type ActionKind, type ServerMessage } from '@flightdeck/protocol';
+import {
+  parseClientMessage,
+  type ActionKind,
+  type EnvVar,
+  type ServerMessage,
+} from '@flightdeck/protocol';
 import type { Context } from './context.js';
 import { identityEnabled, permissionsFor, type Principal } from './identity.js';
 import { RateLimiter } from './ratelimit.js';
@@ -31,6 +36,8 @@ export function handleClientConnection(
     ? permissionsFor(principal, config.operatorRoles, config.adminRoles)
     : undefined;
   const canAct = !idEnabled || (perms?.has('act') ?? false);
+  // Editing env writes secrets, so it needs the stronger reveal (admin) permission.
+  const canReveal = !idEnabled || (perms?.has('reveal') ?? false);
   const who = principal ? (principal.name ?? principal.subject) : actor;
 
   const send = (msg: ServerMessage): void => {
@@ -80,6 +87,10 @@ export function handleClientConnection(
         void handleAction(msg.serviceId, msg.action);
         return;
       }
+      case 'set_env': {
+        void handleSetEnv(msg.serviceId, msg.env);
+        return;
+      }
     }
   });
 
@@ -109,6 +120,43 @@ export function handleClientConnection(
       return;
     }
     const outcome = await commands.dispatch(serviceId, action, service.containerId);
+    finish(outcome.ok, outcome.error);
+  }
+
+  async function handleSetEnv(serviceId: string, env: EnvVar[]): Promise<void> {
+    const finish = (ok: boolean, error?: string): void => {
+      audit.record({ ts: Date.now(), action: 'set_env', serviceId, actor: who, ok, error });
+      metrics.incAction('set_env', ok);
+      send({ type: 'action_result', serviceId, action: 'set_env', ok, error });
+    };
+
+    if (!actionLimiter.allow()) {
+      send({
+        type: 'action_result',
+        serviceId,
+        action: 'set_env',
+        ok: false,
+        error: 'rate limited',
+      });
+      return;
+    }
+    if (!canReveal) {
+      finish(false, 'forbidden: admin role required');
+      return;
+    }
+    if (!config.actionsEnabled) {
+      finish(false, 'actions are disabled');
+      return;
+    }
+    const service = store.getService(serviceId);
+    if (!service) {
+      finish(false, 'unknown service');
+      return;
+    }
+    const outcome = await commands.dispatch(serviceId, 'set_env', service.containerId, env);
+    // Reflect the new env immediately; the agent will also re-report it on its
+    // next discovery scan of the recreated container.
+    if (outcome.ok) store.setEnv(serviceId, env);
     finish(outcome.ok, outcome.error);
   }
 

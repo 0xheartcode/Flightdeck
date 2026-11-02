@@ -2,7 +2,7 @@
 
 A lightweight, self-hosted deployment control plane for containers on your own servers. Railway-style ergonomics, your hardware.
 
-> **Status:** v0.1.0. The spine works end to end: a Rust agent discovers labelled containers on a host, streams their console logs, CPU/memory, and status (including exit codes) over WebSocket to the control plane, and a React UI shows services with live logs and resource usage. Operators can restart or redeploy a container from the UI (opt-in). GitHub Actions deploy correlation, per-user identity (OIDC/JWT) with role-based access, and read-only env surfacing (masked, reveal-gated) are implemented.
+> **Status:** v0.1.0. The spine works end to end: a Rust agent discovers labelled containers on a host, streams their console logs, CPU/memory, and status (including exit codes) over WebSocket to the control plane, and a React UI shows services with live logs and resource usage. Operators can restart or redeploy a container from the UI (opt-in). GitHub Actions deploy correlation, per-user identity (OIDC/JWT) with role-based access, and env surfacing (masked, reveal-gated, with admin editing that recreates the container) are implemented.
 
 ## Why this exists
 

@@ -20,9 +20,12 @@ pub struct IncomingCommand {
     #[allow(dead_code)]
     pub service_id: String,
     pub container_id: String,
+    /// Present only for set_env: the full replacement environment.
+    #[serde(default)]
+    pub env: Option<Vec<EnvVar>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvVar {
     pub key: String,

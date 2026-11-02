@@ -119,8 +119,11 @@ Mitigations, strongest first:
   keeps env out of the broadcast registry and the stream entirely, holds it only
   in memory, and serves it at `GET /api/services/:id` with values masked. Only a
   caller with the reveal permission (an admin role, or any caller in legacy
-  single-token mode) sees raw values; keys are always visible. Editing env
-  (later) will go through the deploy path, never a secrets store of our own.
+  single-token mode) sees raw values; keys are always visible. Editing env is
+  gated on that same reveal permission and on actions being enabled: it sends a
+  `set_env` command and the agent recreates the container with the new
+  environment (the same safe recreate path as redeploy), and the edit is
+  audited. Flightdeck keeps no secrets store of its own.
 
 ## Reporting
 
