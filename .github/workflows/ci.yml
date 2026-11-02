@@ -61,6 +61,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # QEMU lets the agent's arm64 runtime stage run; the Rust build itself
+      # cross-compiles on the native host, so it is not emulated.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v4
       - name: Build control-plane image
         uses: docker/build-push-action@v7
@@ -78,11 +81,12 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Build agent image
+      - name: Build agent image (multi-arch)
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.agent
+          platforms: linux/amd64,linux/arm64
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max

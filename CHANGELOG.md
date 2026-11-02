@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Multi-arch agent image: `docker/Dockerfile.agent` now builds for both
+  `linux/amd64` and `linux/arm64`. The Rust binary is cross-compiled on the
+  native build host (fast, no emulation; `ring` cross-compiles cleanly) and CI
+  validates both architectures, so the agent runs on ARM servers.
 - Environment variable editing: an admin (the reveal permission) can edit a
   service's env from the UI. The control plane sends a `set_env` command and the
   agent recreates the container with the new environment (no image re-pull),
