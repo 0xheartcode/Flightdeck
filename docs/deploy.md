@@ -84,6 +84,15 @@ cargo build --release -p flightdeck-agent
 # -> target/release/flightdeck-agent
 ```
 
+The agent Docker image (`docker/Dockerfile.agent`) builds for both
+`linux/amd64` and `linux/arm64` if you prefer to run the agent as a container
+or to cross-build for an ARM host:
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f docker/Dockerfile.agent -t flightdeck-agent:latest .
+```
+
 On each host:
 
 ```sh
