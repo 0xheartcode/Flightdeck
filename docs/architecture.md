@@ -25,20 +25,28 @@ allowlist is rejected; there is no arbitrary execution.
 ### Control plane (`apps/control-plane/`, TypeScript)
 
 - **HTTP (Hono)**: `GET /api/health`, `GET /api/services`,
-  `GET /api/services/:id` (service + recent log tail + latest deploy),
+  `GET /api/services/:id` (service + recent log tail + latest deploy + env,
+  masked unless revealed), `GET /api/me` (caller identity and permissions),
   `GET /api/audit` (action trail), `GET /api/deploys`, `GET /metrics`
   (Prometheus, unauthenticated, counts only), and `POST /github/webhook`
-  (HMAC-authenticated GitHub Actions ingestion).
+  (HMAC-authenticated GitHub Actions ingestion). The `/api` surface is gated by
+  the dashboard token or, when identity is on, a verified JWT.
+- **Identity and RBAC**: optional. A configured HS256/RS256 key turns on JWT
+  verification (`identity.ts`, node:crypto only, no JWKS fetch); roles map to
+  permissions (view, act, reveal), the audit log records the user, and the
+  single dashboard token is the fallback when identity is off.
 - **WS `/agent`**: token-authenticated. Agents push `service`, `status`,
   `log`, and `service_gone` messages, applied to the store.
-- **WS `/stream`**: browsers connect, receive the live service list, and on
-  `subscribe` get a snapshot of the recent tail then a live stream. An `action`
-  message (e.g. restart) is routed to the agent owning that service, and the
-  result is returned to the requesting browser. Actions are off unless
-  `FD_ENABLE_ACTIONS=true`.
+- **WS `/stream`**: browsers connect (JWT in `?token=` when identity is on),
+  receive the live service list, and on `subscribe` get a snapshot of the recent
+  tail then a live stream. An `action` message (e.g. restart) is routed to the
+  agent owning that service and the result returned to the browser; it requires
+  the act permission and is off unless `FD_ENABLE_ACTIONS=true`.
 - **Store**: in-memory service registry plus a bounded ring buffer of recent
-  logs per service (`FD_LOG_BUFFER_SIZE`). Deliberately not durable; long-term
-  log storage is a later concern (ship to Loki).
+  logs per service (`FD_LOG_BUFFER_SIZE`). Env vars are held in a separate map,
+  kept out of the registry and the stream so raw secret values are never
+  broadcast. Deliberately not durable; long-term log storage is a later concern
+  (ship to Loki).
 
 ### Web (`apps/web/`, React)
 
@@ -75,11 +83,19 @@ latest deploy for a service the moment it subscribes. The `DeployStore`
 interface is intentionally small so a Postgres implementation can replace it for
 HA without touching callers.
 
+## Environment surfacing
+
+With `FD_COLLECT_ENV` on, the agent inspects each labelled container once
+(caching by container id, since env is immutable for a container's lifetime)
+and reports its env vars to the control plane. The control plane strips env from
+the registry it broadcasts, holds it in a separate map, and serves it only at
+`GET /api/services/:id` with values masked. A caller with the reveal permission
+(an admin role, or any caller in legacy single-token mode) sees raw values; keys
+are always visible. Values are never logged.
+
 ## Roadmap
-- **Deploy correlation**: ingest GitHub Actions webhooks and link a workflow
-  run / image tag to the service it deployed, producing a deploy timeline.
-- **Env surfacing**: show the env var names a container runs with, values
-  reveal-gated and audited. Editing (later) goes through the deploy path, not
-  a secrets store of our own.
+- **HA / multi-instance**: a durable, shared store behind the control plane (the
+  `DeployStore` seam already allows a Postgres backend) so more than one instance
+  can run.
 - **Multi-runtime**: systemd and Kubernetes beyond Docker/Podman.
 - **Durable logs**: optional shipping to Loki for search and retention.

@@ -1,19 +1,98 @@
-import type { ServiceInfo } from '@flightdeck/protocol';
+import type { DeployRecord, EnvVar, LogLine, ServiceInfo } from '@flightdeck/protocol';
 
 const API_URL = (import.meta.env.VITE_FD_API_URL as string | undefined) ?? 'http://localhost:4000';
 const DASHBOARD_TOKEN = import.meta.env.VITE_FD_DASHBOARD_TOKEN as string | undefined;
 
+const TOKEN_KEY = 'fd_token';
+
+/** Identity and permissions of the current caller (GET /api/me). */
+export interface Me {
+  identityEnabled: boolean;
+  subject?: string;
+  name?: string;
+  roles: string[];
+  permissions: Array<'view' | 'act' | 'reveal'>;
+}
+
+/** Full detail for one service (GET /api/services/:id). */
+export interface ServiceDetail {
+  service: ServiceInfo;
+  logs: LogLine[];
+  deploy?: DeployRecord;
+  env?: EnvVar[];
+}
+
+/** An HTTP error that carries the response status so callers can detect 401. */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+/**
+ * Runtime dashboard token, stored per browser. Falls back to the build-time
+ * VITE_FD_DASHBOARD_TOKEN when the user has not signed in at runtime. Reads and
+ * writes are guarded because localStorage throws in private mode.
+ */
+export function getToken(): string {
+  try {
+    const stored = localStorage.getItem(TOKEN_KEY);
+    if (stored) return stored;
+  } catch {
+    // localStorage unavailable (private mode); fall through to the build-time token.
+  }
+  return DASHBOARD_TOKEN ?? '';
+}
+
+export function setToken(t: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, t);
+  } catch {
+    // Ignore: without storage the token simply does not persist.
+  }
+}
+
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Ignore: nothing to clear if storage is unavailable.
+  }
+}
+
 function authHeaders(): HeadersInit {
-  return DASHBOARD_TOKEN ? { Authorization: `Bearer ${DASHBOARD_TOKEN}` } : {};
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function fetchServices(): Promise<ServiceInfo[]> {
   const res = await fetch(`${API_URL}/api/services`, { headers: authHeaders() });
   if (!res.ok) {
-    throw new Error(`services request failed: ${res.status}`);
+    throw new ApiError(res.status, `services request failed: ${res.status}`);
   }
   const data = (await res.json()) as { services: ServiceInfo[] };
   return data.services;
+}
+
+export async function fetchMe(): Promise<Me> {
+  const res = await fetch(`${API_URL}/api/me`, { headers: authHeaders() });
+  if (!res.ok) {
+    throw new ApiError(res.status, `me request failed: ${res.status}`);
+  }
+  return (await res.json()) as Me;
+}
+
+export async function fetchServiceDetail(id: string): Promise<ServiceDetail> {
+  const res = await fetch(`${API_URL}/api/services/${encodeURIComponent(id)}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `service detail request failed: ${res.status}`);
+  }
+  return (await res.json()) as ServiceDetail;
 }
 
 /**
@@ -24,5 +103,6 @@ export async function fetchServices(): Promise<ServiceInfo[]> {
  */
 export function streamUrl(): string {
   const base = `${API_URL.replace(/^http/, 'ws')}/stream`;
-  return DASHBOARD_TOKEN ? `${base}?token=${encodeURIComponent(DASHBOARD_TOKEN)}` : base;
+  const token = getToken();
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }

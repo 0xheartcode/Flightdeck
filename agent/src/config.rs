@@ -33,6 +33,13 @@ pub struct Config {
     /// This host's name, reported with every service.
     #[arg(long, env = "HOSTNAME", default_value = "unknown-host")]
     pub hostname: String,
+
+    /// Collect each container's environment variables and report them to the
+    /// control plane. OFF by default: env values are secrets, and this exposes
+    /// them to the control plane (which masks them in the UI unless an operator
+    /// with the right role reveals them). Opt in only on trusted deployments.
+    #[arg(long, env = "FD_COLLECT_ENV", default_value_t = false)]
+    pub collect_env: bool,
 }
 
 impl Config {

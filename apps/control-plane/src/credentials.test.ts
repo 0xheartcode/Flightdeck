@@ -25,6 +25,13 @@ function config(overrides: Partial<Config> = {}): Config {
     githubWebhookSecret: '',
     maxConnections: 1000,
     actionRatePerMin: 30,
+    oidcIssuer: '',
+    oidcAudience: '',
+    oidcHs256Secret: '',
+    oidcRs256PublicKey: '',
+    oidcRolesClaim: 'roles',
+    operatorRoles: [],
+    adminRoles: [],
     ...overrides,
   };
 }

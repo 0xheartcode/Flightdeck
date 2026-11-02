@@ -37,6 +37,28 @@ export interface Config {
   maxConnections: number;
   /** Max operator actions a single browser socket may trigger per minute. */
   actionRatePerMin: number;
+  /** OIDC issuer to require in the `iss` claim. Empty skips the issuer check. */
+  oidcIssuer: string;
+  /** Expected `aud` claim. Empty skips the audience check. */
+  oidcAudience: string;
+  /** HS256 shared secret for verifying JWTs. Setting it (or the RS256 key) turns identity on. */
+  oidcHs256Secret: string;
+  /** RS256 public key (PEM) for verifying JWTs. Setting it (or the HS256 secret) turns identity on. */
+  oidcRs256PublicKey: string;
+  /** Claim holding the user's roles (dotted path allowed, e.g. `realm_access.roles`). */
+  oidcRolesClaim: string;
+  /** Roles permitted to trigger actions (restart, redeploy). */
+  operatorRoles: string[];
+  /** Roles permitted to reveal masked environment variable values. */
+  adminRoles: string[];
+}
+
+/** Split a comma or newline separated role list into trimmed, non-empty names. */
+function list(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -91,24 +113,38 @@ export function loadConfig(): Config {
     githubWebhookSecret: process.env.FD_GITHUB_WEBHOOK_SECRET ?? '',
     maxConnections: num(process.env.FD_MAX_CONNECTIONS, 1000),
     actionRatePerMin: num(process.env.FD_ACTION_RATE_PER_MIN, 30),
+    oidcIssuer: process.env.FD_OIDC_ISSUER ?? '',
+    oidcAudience: process.env.FD_OIDC_AUDIENCE ?? '',
+    oidcHs256Secret: process.env.FD_OIDC_HS256_SECRET ?? '',
+    // Allow the PEM to be supplied with literal "\n" escapes (common in env files).
+    oidcRs256PublicKey: (process.env.FD_OIDC_RS256_PUBLIC_KEY ?? '').replace(/\\n/g, '\n'),
+    oidcRolesClaim: process.env.FD_OIDC_ROLES_CLAIM || 'roles',
+    operatorRoles: list(process.env.FD_OPERATOR_ROLES),
+    adminRoles: list(process.env.FD_ADMIN_ROLES),
   };
 
   // Agent-credential presence is validated by the CredentialStore, which
   // warns when none are configured (FD_AGENT_TOKEN / FD_AGENT_TOKENS[_FILE]).
+  // Identity (JWT) authenticates the browser when a verification key is set;
+  // the single dashboard token is the fallback. "Unauthenticated" warnings only
+  // apply when neither is configured.
+  const identityOn = Boolean(config.oidcHs256Secret || config.oidcRs256PublicKey);
   const log = logger.child({ component: 'config' });
-  if (!config.dashboardToken) {
+  if (!config.dashboardToken && !identityOn) {
     log.warn(
-      'FD_DASHBOARD_TOKEN is empty; the browser API and log stream are UNAUTHENTICATED. ' +
-        'Set it, or keep the control plane on a trusted network only.',
+      'neither FD_DASHBOARD_TOKEN nor OIDC is set; the browser API and log stream are ' +
+        'UNAUTHENTICATED. Configure identity, set a dashboard token, or keep the control ' +
+        'plane on a trusted network only.',
     );
   }
   if (config.corsOrigin === '*') {
     log.warn('FD_CORS_ORIGIN is "*"; any website can call the API from a browser.');
   }
-  if (config.actionsEnabled && !config.dashboardToken) {
+  if (config.actionsEnabled && !config.dashboardToken && !identityOn) {
     log.warn(
-      'FD_ENABLE_ACTIONS is on without FD_DASHBOARD_TOKEN; anyone who can reach the stream ' +
-        'can restart or redeploy containers. Set a dashboard token or restrict the network.',
+      'FD_ENABLE_ACTIONS is on without authentication; anyone who can reach the stream ' +
+        'can restart or redeploy containers. Configure identity, set a dashboard token, ' +
+        'or restrict the network.',
     );
   }
 

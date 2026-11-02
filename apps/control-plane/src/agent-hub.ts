@@ -37,16 +37,21 @@ export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: st
         connHost = msg.hostname;
         log.info({ agentId: msg.agentId, host: msg.hostname }, 'agent connected');
         break;
-      case 'service':
+      case 'service': {
         // A connection may only announce services for its own host.
         if (connHost !== undefined && msg.service.host !== connHost) {
           log.warn({ claimedHost: msg.service.host }, 'rejected service for a different host');
           break;
         }
-        owned.add(msg.service.id);
-        store.upsertService(msg.service);
-        commands.registerService(msg.service.id, sendCommand);
+        // Split env off the registry record: it holds secret values and must
+        // never be broadcast. It is stored separately and served masked.
+        const { env, ...service } = msg.service;
+        owned.add(service.id);
+        store.upsertService(service);
+        store.setEnv(service.id, env);
+        commands.registerService(service.id, sendCommand);
         break;
+      }
       case 'service_gone':
         if (!owned.has(msg.serviceId)) break;
         owned.delete(msg.serviceId);

@@ -50,6 +50,23 @@ Mitigations, strongest first:
   `/stream` WebSocket upgrade validates the `Origin` header against it, since
   WebSockets otherwise bypass CORS entirely.
 
+### Identity and roles
+
+- For per-user access instead of one shared token, configure identity: the
+  control plane verifies a JWT bearer (any OIDC provider that issues JWTs) with
+  a configured HS256 secret or RS256 public key (`FD_OIDC_*`). Setting a key
+  turns identity on and the dashboard token no longer applies. Verification is
+  local: the signature (HS256 or RS256), `exp`/`nbf` (with small leeway), and
+  `iss`/`aud` when configured are all checked, and the `none` algorithm is
+  rejected. There is no JWKS fetch, so no network dependency; a rotating JWKS
+  endpoint is a later addition.
+- Roles (read from `FD_OIDC_ROLES_CLAIM`, a dotted path is allowed) map to
+  permissions: a role in `FD_OPERATOR_ROLES` may trigger actions, a role in
+  `FD_ADMIN_ROLES` may additionally reveal env values, and every authenticated
+  user may view. With no roles configured, any authenticated user is a trusted
+  operator. The browser cannot set WebSocket headers, so the stream token rides
+  the `?token=` query; treat it like any bearer token and run behind TLS.
+
 ## Operator actions
 
 - Actions that change a container (`restart`, and `redeploy` which recreates it
@@ -58,10 +75,12 @@ Mitigations, strongest first:
   rejects anything else, so there is no arbitrary command execution through the
   agent. Redeploy renames the old container aside and restores it if the new
   one fails to start.
-- When actions are enabled, set `FD_DASHBOARD_TOKEN` so only authenticated
-  browsers can trigger them (the control plane warns if actions are on without
-  a dashboard token). An action is routed only to the agent that owns the
-  target service.
+- When actions are enabled, authenticate the browser surface so only trusted
+  callers can trigger them: set `FD_DASHBOARD_TOKEN`, or enable identity and put
+  the acting roles in `FD_OPERATOR_ROLES` (the control plane warns if actions
+  are on without any authentication). With identity on, a caller lacking an
+  operator role is refused and the refusal is audited. An action is routed only
+  to the agent that owns the target service.
 - Every action is recorded to an audit trail (who/what/when/outcome): to the
   structured log, to `/api/audit`, and, if `FD_AUDIT_LOG_FILE` is set, appended
   as JSONL so it survives a restart.
@@ -92,9 +111,14 @@ Mitigations, strongest first:
 - Logs can contain secrets that applications print. Treat the log tail and the
   log stream as sensitive, and put the control plane behind authentication
   before exposing it.
-- Flightdeck-CD does not store application secrets. Planned env surfacing shows
-  variable names with values reveal-gated and audited; editing (later) will go
-  through the deploy path, never a secrets store of our own.
+- Flightdeck-CD does not persist application secrets. Environment surfacing is
+  off by default (`FD_COLLECT_ENV`); when on, the agent reports each container's
+  env to the control plane over the authenticated agent link. The control plane
+  keeps env out of the broadcast registry and the stream entirely, holds it only
+  in memory, and serves it at `GET /api/services/:id` with values masked. Only a
+  caller with the reveal permission (an admin role, or any caller in legacy
+  single-token mode) sees raw values; keys are always visible. Editing env
+  (later) will go through the deploy path, never a secrets store of our own.
 
 ## Reporting
 

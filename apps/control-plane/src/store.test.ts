@@ -87,4 +87,24 @@ describe('Store', () => {
     store.appendLog(log('ghost', 'should be ignored'));
     expect(store.recentLogs('ghost')).toEqual([]);
   });
+
+  it('stores and clears env separately, and never exposes it on the registry', () => {
+    const store = new Store(10);
+    store.upsertService(service('api'));
+    store.setEnv('api', [{ key: 'A', value: '1' }]);
+    expect(store.getEnv('api')).toEqual([{ key: 'A', value: '1' }]);
+    // Env must not ride the broadcast registry record.
+    expect(store.getService('api')).not.toHaveProperty('env');
+    // An empty list clears it.
+    store.setEnv('api', []);
+    expect(store.getEnv('api')).toBeUndefined();
+  });
+
+  it('drops env when a service is removed', () => {
+    const store = new Store(10);
+    store.upsertService(service('api'));
+    store.setEnv('api', [{ key: 'A', value: '1' }]);
+    store.removeService('api');
+    expect(store.getEnv('api')).toBeUndefined();
+  });
 });

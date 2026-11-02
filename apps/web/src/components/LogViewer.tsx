@@ -13,6 +13,8 @@ interface Props {
   actionPending: boolean;
   deploy: DeployRecord | null;
   onAction: (action: ActionKind) => void;
+  /** Whether the caller may trigger operator actions. Disables the buttons when false. */
+  canAct?: boolean;
 }
 
 const DEPLOY_COLORS: Record<DeployStatus, string> = {
@@ -45,8 +47,11 @@ export function LogViewer({
   actionPending,
   deploy,
   onAction,
+  canAct = true,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
+
+  const actionTitle = canAct ? undefined : 'Requires an operator role';
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -90,7 +95,8 @@ export function LogViewer({
           <button
             type="button"
             onClick={() => confirmAction('restart', 'Restart')}
-            disabled={actionPending}
+            disabled={actionPending || !canAct}
+            title={actionTitle}
             className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Restart
@@ -98,7 +104,8 @@ export function LogViewer({
           <button
             type="button"
             onClick={() => confirmAction('redeploy', 'Redeploy')}
-            disabled={actionPending}
+            disabled={actionPending || !canAct}
+            title={actionTitle}
             className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {actionPending ? 'working...' : 'Redeploy'}
