@@ -64,6 +64,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     oidcScopes: 'openid profile email',
     sessionSecret: '',
     webAppUrl: 'http://localhost:5173',
+    lokiUrl: '',
+    lokiTenant: '',
     ...overrides,
   };
 }
@@ -111,6 +113,13 @@ describe('http api', () => {
     const app = createHttpApp(makeContext(), () => 0);
     const res = await app.request('/api/services/ghost');
     expect(res.status).toBe(404);
+  });
+
+  it('404s log search when Loki is not configured', async () => {
+    const app = createHttpApp(makeContext(), () => 0);
+    const res = await app.request('/api/services/svc/logs/search?q=x');
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'log search is not configured' });
   });
 
   it('serves Prometheus metrics without auth, even when a dashboard token is set', async () => {

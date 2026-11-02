@@ -43,6 +43,8 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     oidcScopes: 'openid profile email',
     sessionSecret: '',
     webAppUrl: 'http://localhost:5173',
+    lokiUrl: '',
+    lokiTenant: '',
     ...overrides,
   };
 }

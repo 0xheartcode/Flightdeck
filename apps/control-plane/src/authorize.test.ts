@@ -37,6 +37,8 @@ const base: Config = {
   oidcScopes: 'openid profile email',
   sessionSecret: '',
   webAppUrl: 'http://localhost:5173',
+  lokiUrl: '',
+  lokiTenant: '',
 };
 
 // Resolves the one known token to the agent name "edge-1".

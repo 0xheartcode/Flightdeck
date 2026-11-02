@@ -8,6 +8,7 @@ import { logger } from './logger.js';
 import { bearer } from './auth.js';
 import { authorizeUpgrade } from './authorize.js';
 import { JwksCache, logIdentityConfig, verifyToken } from './identity.js';
+import { LokiClient, lokiEnabled } from './loki.js';
 import { sessionToken } from './oidclogin.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
@@ -43,6 +44,9 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   // refreshes in the background so verification stays synchronous.
   const jwks = config.oidcJwksUri ? new JwksCache(config.oidcJwksUri) : undefined;
   const stopJwks = jwks?.start();
+  // Ship logs to Loki for durable storage and search, when configured.
+  const loki = lokiEnabled(config) ? new LokiClient(config.lokiUrl, config.lokiTenant) : undefined;
+  const stopLoki = loki?.start();
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
@@ -51,6 +55,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     metrics: new Metrics(),
     deploys,
     jwks,
+    loki,
   };
 
   log.info(
@@ -155,6 +160,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     new Promise((resolve) => {
       clearInterval(revocationTimer);
       stopJwks?.();
+      stopLoki?.();
       agentWss.close();
       clientWss.close();
       deploys.close();

@@ -8,7 +8,7 @@ import { logger } from './logger.js';
  * handler has already verified the bearer token before this runs.
  */
 export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: string): void {
-  const { store, commands, metrics } = ctx;
+  const { store, commands, metrics, loki } = ctx;
   // Services announced over this connection. Used to remove them when the
   // agent disconnects (a dead host must not linger as a false "running"), and
   // to stop one connection from reporting for services it did not announce.
@@ -66,6 +66,7 @@ export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: st
         if (!owned.has(msg.log.serviceId)) break;
         store.appendLog(msg.log);
         metrics.incLogLines();
+        loki?.push(msg.log);
         break;
       case 'stats':
         if (!owned.has(msg.stats.serviceId)) break;
