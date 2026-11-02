@@ -93,7 +93,7 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     if (c.req.method === 'OPTIONS') return next();
     const token = bearer(c.req.header('authorization'));
     if (idEnabled) {
-      const principal = verifyToken(token, config);
+      const principal = verifyToken(token, config, ctx.jwks);
       if (!principal) return c.json({ error: 'unauthorized' }, 401);
       c.set('auth', {
         principal,

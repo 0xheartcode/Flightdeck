@@ -116,12 +116,13 @@ Choose one for the browser surface (the agent always uses its own token):
 
 - **Dashboard token** (simplest): set `FD_DASHBOARD_TOKEN`. Everyone who has it
   is a trusted operator.
-- **Identity (OIDC/JWT)**: set `FD_OIDC_HS256_SECRET` or
-  `FD_OIDC_RS256_PUBLIC_KEY` to require a verified JWT, and map roles to
-  permissions with `FD_OPERATOR_ROLES` (may act) and `FD_ADMIN_ROLES` (may
-  reveal env values). The audit log then records the user. See
-  [security.md](security.md) for the full model. Token verification is local
-  (no JWKS fetch yet), so paste the provider's current signing key.
+- **Identity (OIDC/JWT)**: set `FD_OIDC_HS256_SECRET`, `FD_OIDC_RS256_PUBLIC_KEY`,
+  or `FD_OIDC_JWKS_URI` to require a verified JWT, and map roles to permissions
+  with `FD_OPERATOR_ROLES` (may act) and `FD_ADMIN_ROLES` (may reveal env
+  values). The audit log then records the user. With a JWKS URI the provider's
+  rotating keys are tracked automatically; with a static key, paste the
+  provider's current signing key. See [security.md](security.md) for the full
+  model.
 
 ## Operations
 
