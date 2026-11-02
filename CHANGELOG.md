@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Multi-runtime agent (systemd): the agent now selects a runtime via
+  `FD_RUNTIME` ("docker", the default, or "systemd"). The systemd backend tracks
+  the units listed in `FD_SYSTEMD_UNITS` through `systemctl`/`journalctl`: it
+  discovers their state, streams their journal as logs, and restarts them
+  (redeploy and env editing do not apply to units). The Docker/Podman path is
+  unchanged. Kubernetes is a further runtime.
 - Browser end-to-end smoke test (Playwright): a harness (`just e2e`) that builds
   both apps, boots the control plane with a fake agent, serves the web bundle,
   and drives a real browser to assert the dashboard loads, lists the service,
