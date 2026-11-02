@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { parseClientMessage, type ActionKind, type ServerMessage } from '@flightdeck/protocol';
 import type { Context } from './context.js';
+import { identityEnabled, permissionsFor, type Principal } from './identity.js';
 import { RateLimiter } from './ratelimit.js';
 
 /** Max distinct services one browser socket may subscribe to. */
@@ -13,10 +14,24 @@ const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
  * `subscribe` replay the recent log tail then stream new events, and on
  * `action` dispatch an allowlisted command to the owning agent (auditing it).
  */
-export function handleClientConnection(ws: WebSocket, ctx: Context, actor: string): void {
+export function handleClientConnection(
+  ws: WebSocket,
+  ctx: Context,
+  actor: string,
+  principal?: Principal,
+): void {
   const { store, commands, config, audit, metrics, deploys } = ctx;
   const unsubscribers = new Map<string, () => void>();
   const actionLimiter = new RateLimiter(config.actionRatePerMin, 60_000);
+
+  // When identity is enforced, gate actions on the `act` permission and
+  // attribute the audit entry to the user rather than the socket address.
+  const idEnabled = identityEnabled(config);
+  const perms = principal
+    ? permissionsFor(principal, config.operatorRoles, config.adminRoles)
+    : undefined;
+  const canAct = !idEnabled || (perms?.has('act') ?? false);
+  const who = principal ? (principal.name ?? principal.subject) : actor;
 
   const send = (msg: ServerMessage): void => {
     if (ws.readyState !== WebSocket.OPEN) return;
@@ -70,7 +85,7 @@ export function handleClientConnection(ws: WebSocket, ctx: Context, actor: strin
 
   async function handleAction(serviceId: string, action: ActionKind): Promise<void> {
     const finish = (ok: boolean, error?: string): void => {
-      audit.record({ ts: Date.now(), action, serviceId, actor, ok, error });
+      audit.record({ ts: Date.now(), action, serviceId, actor: who, ok, error });
       metrics.incAction(action, ok);
       send({ type: 'action_result', serviceId, action, ok, error });
     };
@@ -78,6 +93,10 @@ export function handleClientConnection(ws: WebSocket, ctx: Context, actor: strin
     // Rate limit before anything else, so a spammer cannot flood the audit log.
     if (!actionLimiter.allow()) {
       send({ type: 'action_result', serviceId, action, ok: false, error: 'rate limited' });
+      return;
+    }
+    if (!canAct) {
+      finish(false, 'forbidden: operator role required');
       return;
     }
     if (!config.actionsEnabled) {

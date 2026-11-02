@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@flightdeck/protocol';
 import type { Config } from './config.js';
+import { mintHs256 } from './config.testutil.js';
 import { startControlPlane, type ControlPlaneHandle } from './server.js';
+
+const future = Math.floor(Date.now() / 1000) + 3600;
 
 function testConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -24,6 +27,13 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     githubWebhookSecret: '',
     maxConnections: 1000,
     actionRatePerMin: 30,
+    oidcIssuer: '',
+    oidcAudience: '',
+    oidcHs256Secret: '',
+    oidcRs256PublicKey: '',
+    oidcRolesClaim: 'roles',
+    operatorRoles: [],
+    adminRoles: [],
     ...overrides,
   };
 }
@@ -237,5 +247,114 @@ describe('control plane integration', () => {
       .map((m) => m.error as string);
     expect(errors).toContain('rate limited');
     browser.close();
+  });
+
+  it('gates actions by role when identity is enabled', async () => {
+    const SECRET = 'stream-secret';
+    cp = startControlPlane(testConfig({ oidcHs256Secret: SECRET, operatorRoles: ['operator'] }));
+    const port = await cp.listening;
+
+    const agent = await connectAgent(port, 'host-a');
+    agent.on('message', (data) => {
+      const m = JSON.parse(data.toString()) as Msg;
+      if (m.type === 'command') {
+        agent.send(JSON.stringify({ v, type: 'command_result', id: m.id, ok: true }));
+      }
+    });
+    agent.send(serviceMsg('svc', 'host-a'));
+
+    const connectBrowser = async (roles: string[]): Promise<[WebSocket, Msg[]]> => {
+      const token = mintHs256({ sub: roles.join(), roles, exp: future }, SECRET);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/stream?token=${token}`);
+      const msgs = collect(ws);
+      await open(ws);
+      await waitFor(() =>
+        msgs.find(
+          (m) =>
+            m.type === 'services' &&
+            (m.services as Array<{ id: string }>).some((s) => s.id === 'svc'),
+        ),
+      );
+      ws.send(JSON.stringify({ type: 'subscribe', serviceId: 'svc' }));
+      return [ws, msgs];
+    };
+
+    // A viewer (no operator role) is refused.
+    const [viewer, viewerMsgs] = await connectBrowser(['viewer']);
+    viewer.send(JSON.stringify({ type: 'action', action: 'restart', serviceId: 'svc' }));
+    const denied = await waitFor(() => viewerMsgs.find((m) => m.type === 'action_result'));
+    expect(denied.ok).toBe(false);
+    expect(denied.error).toBe('forbidden: operator role required');
+
+    // An operator is allowed and the agent receives the command.
+    const [operator, operatorMsgs] = await connectBrowser(['operator']);
+    operator.send(JSON.stringify({ type: 'action', action: 'restart', serviceId: 'svc' }));
+    const allowed = await waitFor(() => operatorMsgs.find((m) => m.type === 'action_result'));
+    expect(allowed.ok).toBe(true);
+
+    viewer.close();
+    operator.close();
+    agent.close();
+  });
+
+  it('stores env from the agent, masks it on the API, and keeps it off the stream', async () => {
+    const SECRET = 'env-secret';
+    cp = startControlPlane(
+      testConfig({ oidcHs256Secret: SECRET, operatorRoles: ['operator'], adminRoles: ['admin'] }),
+    );
+    const port = await cp.listening;
+
+    const agent = await connectAgent(port, 'host-a');
+    agent.send(
+      JSON.stringify({
+        v,
+        type: 'service',
+        service: {
+          id: 'svc',
+          name: 'svc',
+          image: 'img',
+          containerId: 'c',
+          state: 'running',
+          host: 'host-a',
+          createdAt: 0,
+          env: [{ key: 'SECRET_KEY', value: 's3cr3t' }],
+        },
+      }),
+    );
+
+    const operator = mintHs256({ sub: 'op', roles: ['operator'], exp: future }, SECRET);
+    const admin = mintHs256({ sub: 'ad', roles: ['admin'], exp: future }, SECRET);
+    const getJson = async (path: string, token: string): Promise<Msg> =>
+      (await (
+        await fetch(`http://127.0.0.1:${port}${path}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      ).json()) as Msg;
+
+    // Wait for the service to register, then read it as an operator: env masked.
+    let detail: Msg | undefined;
+    for (let i = 0; i < 40; i++) {
+      const res = await fetch(`http://127.0.0.1:${port}/api/services/svc`, {
+        headers: { Authorization: `Bearer ${operator}` },
+      });
+      if (res.status === 200) {
+        detail = (await res.json()) as Msg;
+        break;
+      }
+      await sleep(30);
+    }
+    expect(detail?.env).toEqual([{ key: 'SECRET_KEY', value: '********' }]);
+
+    // The service list never carries env.
+    const list = (await getJson('/api/services', operator)) as {
+      services: Array<Record<string, unknown>>;
+    };
+    expect(list.services[0]).not.toHaveProperty('env');
+
+    // An admin reveals the real value.
+    const adminDetail = await getJson('/api/services/svc', admin);
+    expect(adminDetail.env).toEqual([{ key: 'SECRET_KEY', value: 's3cr3t' }]);
+
+    agent.close();
   });
 });
