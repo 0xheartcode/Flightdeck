@@ -22,6 +22,13 @@ The agent also executes allowlisted commands sent by the control plane
 container with the same config), reporting the result. Anything not on the
 allowlist is rejected; there is no arbitrary execution.
 
+`FD_RUNTIME` selects the backend. The default `docker` is the flow above. With
+`systemd` (see agent/src/systemd.rs), the agent instead tracks the units in
+`FD_SYSTEMD_UNITS` via `systemctl`/`journalctl`: it reports their state,
+streams their journal as logs, and restarts them (redeploy and env editing do
+not apply to units). The Docker and systemd loops are kept separate so the
+container path is untouched; Kubernetes would be a third runtime.
+
 ### Control plane (`apps/control-plane/`, TypeScript)
 
 - **HTTP (Hono)**: `GET /api/health`, `GET /api/services`,
@@ -113,4 +120,5 @@ actions being enabled, and audited.
 ## Roadmap
 - **HA live fan-out**: a shared message bus so live logs and commands cross
   instances (the durable store is already shared via Postgres, see above).
-- **Multi-runtime**: systemd and Kubernetes beyond Docker/Podman.
+- **Kubernetes runtime**: a kube-backend for the agent (Docker/Podman and
+  systemd are supported; see the agent section).
