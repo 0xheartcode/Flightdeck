@@ -34,3 +34,7 @@ logs/
 
 # Local-only tooling and reports (never shipped)
 /local/
+
+# Playwright
+/apps/web/playwright-report/
+/apps/web/test-results/

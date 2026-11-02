@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Browser end-to-end smoke test (Playwright): a harness (`just e2e`) that builds
+  both apps, boots the control plane with a fake agent, serves the web bundle,
+  and drives a real browser to assert the dashboard loads, lists the service,
+  and streams its logs. Runs as a main-only CI job; kept out of the fast gate.
 - HA foundation (Postgres-backed shared state): the deploy store is now a
   pluggable async interface with a SQLite backend (single instance, the default)
   and a Postgres backend selected by `FD_DATABASE_URL`. With Postgres, multiple
@@ -115,6 +119,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   works for simple setups.
 - A control-plane connection may only report for services it announced, and
   only for its own host, preventing cross-connection spoofing or clobbering.
+
+### Fixed
+
+- CORS now allows credentials only with a specific `FD_CORS_ORIGIN` (not `*`),
+  so the web app's credentialed requests and the session cookie work
+  cross-origin. The browser forbids combining credentials with a wildcard
+  origin, which silently blocked the service list when the UI and control plane
+  were on different origins. Caught by the new browser e2e test.
 
 ## [0.1.0] - 2026-10-28
 
