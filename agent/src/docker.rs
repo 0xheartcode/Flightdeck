@@ -520,7 +520,7 @@ pub fn now_ms() -> i64 {
 
 /// Truncate a string to at most `max` bytes, respecting char boundaries, and
 /// mark it so readers know it was clipped.
-fn truncate(line: &str, max: usize) -> String {
+pub(crate) fn truncate(line: &str, max: usize) -> String {
     if line.len() <= max {
         return line.to_string();
     }

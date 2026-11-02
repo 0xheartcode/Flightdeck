@@ -13,7 +13,7 @@ name = "flightdeck-agent"
 path = "src/main.rs"
 
 [dependencies]
-tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "signal", "time", "sync", "process", "io-util"] }
 bollard = "0.21"
 # "rustls-tls-native-roots" lets the agent connect over wss:// using the OS
 # trust store, without an OpenSSL system dependency.
