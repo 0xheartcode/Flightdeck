@@ -26,6 +26,10 @@ ENV FD_CONTROL_PLANE_PORT=4000
 WORKDIR /app
 RUN addgroup -g 1001 -S nodejs && adduser -u 1001 -G nodejs -S nodejs
 COPY --from=build --chown=nodejs:nodejs /app /app
+# Writable data dir for the SQLite deploy store and the audit JSONL. Owned by
+# the runtime user so a fresh named volume mounted here inherits that ownership.
+RUN mkdir -p /data && chown nodejs:nodejs /data
+VOLUME /data
 USER nodejs
 EXPOSE 4000
 ENTRYPOINT ["dumb-init", "--"]

@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Production deployment path: `docker/compose.prod.yaml` (control plane + web
+  only, bound to localhost for a TLS reverse proxy, with a persistent `/data`
+  volume for the deploy store and audit trail and a readiness healthcheck), a
+  systemd unit and env template (`deploy/`) for running the agent as a non-root
+  binary against a rootless Podman socket, and a production guide
+  (`docs/deploy.md`).
+- Health probes: unauthenticated `GET /healthz` (liveness) and `GET /readyz`
+  (readiness, which checks the deploy store). Container healthchecks now use
+  these, so they keep working once the browser surface requires auth (the old
+  `/api/health` sits behind the auth gate).
+
 - Identity and access control: the control plane can verify a JWT bearer token
   (any OIDC provider that issues JWTs) on the browser stream and REST API, using
   a configured HS256 secret or RS256 public key (`FD_OIDC_*`). Verification is
