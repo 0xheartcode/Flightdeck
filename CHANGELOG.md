@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- HA foundation (Postgres-backed shared state): the deploy store is now a
+  pluggable async interface with a SQLite backend (single instance, the default)
+  and a Postgres backend selected by `FD_DATABASE_URL`. With Postgres, multiple
+  control-plane instances behind a load balancer share durable deploy state (a
+  webhook to one instance is visible from another). Note the in-memory service
+  registry and live log streaming remain per-instance; a cross-instance bus for
+  live fan-out is the next HA step. Adds the `pg` dependency.
 - Durable log search (Loki): set `FD_LOKI_URL` and the control plane ships every
   log line to Loki (batched) in addition to the in-memory tail, and
   `GET /api/services/:id/logs/search?q=&from=&to=` runs a LogQL range query so

@@ -70,8 +70,10 @@ export function handleClientConnection(
         // Push the latest known deploy for this service's repo, if any.
         const svc = store.getService(msg.serviceId);
         if (svc?.repo) {
-          const latest = deploys.latestForRepo(svc.repo, svc.environment);
-          if (latest) send({ type: 'deploy', serviceId: msg.serviceId, deploy: latest });
+          const serviceId = msg.serviceId;
+          void deploys.latestForRepo(svc.repo, svc.environment).then((latest) => {
+            if (latest) send({ type: 'deploy', serviceId, deploy: latest });
+          });
         }
         return;
       }

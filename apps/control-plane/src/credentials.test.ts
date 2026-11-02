@@ -22,6 +22,7 @@ function config(overrides: Partial<Config> = {}): Config {
     auditMax: 500,
     auditFile: '',
     dbFile: ':memory:',
+    databaseUrl: '',
     githubWebhookSecret: '',
     maxConnections: 1000,
     actionRatePerMin: 30,
