@@ -130,8 +130,14 @@ Choose one for the browser surface (the agent always uses its own token):
   with `FD_OPERATOR_ROLES` (may act) and `FD_ADMIN_ROLES` (may reveal env
   values). The audit log then records the user. With a JWKS URI the provider's
   rotating keys are tracked automatically; with a static key, paste the
-  provider's current signing key. See [security.md](security.md) for the full
-  model.
+  provider's current signing key.
+- **Browser login (recommended with identity)**: also set `FD_OIDC_CLIENT_ID`,
+  `FD_OIDC_AUTH_ENDPOINT`, `FD_OIDC_TOKEN_ENDPOINT`, `FD_OIDC_REDIRECT_URI`
+  (`https://flightdeck.example.com/auth/callback`), and `FD_SESSION_SECRET` so
+  users click "Sign in" and authenticate with the provider instead of pasting a
+  JWT. The session is an HttpOnly cookie, so the UI and control plane must share
+  one origin (the single-domain reverse proxy above does this). See
+  [security.md](security.md) for the full model.
 
 ## Operations
 

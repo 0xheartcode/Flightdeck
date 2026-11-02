@@ -12,6 +12,20 @@ import {
   type Permission,
   type Principal,
 } from './identity.js';
+import {
+  buildAuthUrl,
+  cookie,
+  exchangeCode,
+  LOGIN_COOKIE,
+  loginFlowEnabled,
+  parseCookies,
+  pkcePair,
+  randomState,
+  SESSION_COOKIE,
+  sessionToken,
+  sign,
+  unsign,
+} from './oidclogin.js';
 import { logger } from './logger.js';
 
 const log = logger.child({ component: 'http' });
@@ -40,6 +54,9 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
   const { config, store, audit, metrics, deploys } = ctx;
   const app = new Hono<AppEnv>();
   const idEnabled = identityEnabled(config);
+  const loginEnabled = loginFlowEnabled(config);
+  // Mark cookies Secure when the callback is served over https (production).
+  const secureCookies = config.oidcRedirectUri.startsWith('https');
 
   // Metrics are unauthenticated (counts only, no secrets) and outside /api so
   // the CORS and dashboard-token middleware below do not apply.
@@ -62,6 +79,62 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     }
     return c.json({ status: 'ready', agents: agentCount(), services: store.listServices().length });
   });
+
+  // OIDC browser login (authorization-code + PKCE). Enabled only when the client
+  // and endpoints are configured. These live outside /api: they establish the
+  // session that /api and /stream then accept.
+  if (loginEnabled) {
+    app.get('/auth/login', (c) => {
+      const state = randomState();
+      const { verifier, challenge } = pkcePair();
+      // Carry state + verifier in a short-lived signed cookie across the redirect.
+      c.header(
+        'Set-Cookie',
+        cookie(LOGIN_COOKIE, sign(config.sessionSecret, JSON.stringify({ state, verifier })), {
+          maxAge: 600,
+          secure: secureCookies,
+        }),
+      );
+      return c.redirect(buildAuthUrl(config, state, challenge));
+    });
+
+    app.get('/auth/callback', async (c) => {
+      const code = c.req.query('code');
+      const state = c.req.query('state');
+      const loginRaw = parseCookies(c.req.header('cookie'))[LOGIN_COOKIE];
+      const saved = unsign(config.sessionSecret, loginRaw);
+      if (!code || !state || !saved) return c.text('invalid login state', 400);
+      let parsed: { state?: string; verifier?: string };
+      try {
+        parsed = JSON.parse(saved);
+      } catch {
+        return c.text('invalid login state', 400);
+      }
+      if (parsed.state !== state || !parsed.verifier) return c.text('state mismatch', 400);
+
+      const idToken = await exchangeCode(config, code, parsed.verifier);
+      if (!idToken || !verifyToken(idToken, config, ctx.jwks)) {
+        return c.text('login failed', 401);
+      }
+      // Store the provider JWT as the session, clear the login cookie, go to the UI.
+      c.header(
+        'Set-Cookie',
+        cookie(SESSION_COOKIE, idToken, { maxAge: 28_800, secure: secureCookies }),
+        {
+          append: true,
+        },
+      );
+      c.header('Set-Cookie', cookie(LOGIN_COOKIE, '', { maxAge: 0, secure: secureCookies }), {
+        append: true,
+      });
+      return c.redirect(config.webAppUrl);
+    });
+
+    app.get('/auth/logout', (c) => {
+      c.header('Set-Cookie', cookie(SESSION_COOKIE, '', { maxAge: 0, secure: secureCookies }));
+      return c.redirect(config.webAppUrl);
+    });
+  }
 
   // GitHub webhook: authenticated by HMAC signature, not the dashboard token,
   // so it lives outside /api. Disabled unless a secret is configured.
@@ -91,7 +164,8 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
   // (and when neither is set, the API is open and the caller holds all perms).
   app.use('/api/*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
-    const token = bearer(c.req.header('authorization'));
+    // Accept a bearer token or the login session cookie.
+    const token = bearer(c.req.header('authorization')) ?? sessionToken(c.req.header('cookie'));
     if (idEnabled) {
       const principal = verifyToken(token, config, ctx.jwks);
       if (!principal) return c.json({ error: 'unauthorized' }, 401);
@@ -116,6 +190,7 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     const auth = c.get('auth');
     return c.json({
       identityEnabled: idEnabled,
+      loginFlow: loginEnabled,
       subject: auth.principal?.subject,
       name: auth.principal?.name,
       roles: auth.principal?.roles ?? [],

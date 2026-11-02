@@ -8,6 +8,8 @@ const TOKEN_KEY = 'fd_token';
 /** Identity and permissions of the current caller (GET /api/me). */
 export interface Me {
   identityEnabled: boolean;
+  /** True when OIDC browser login is configured, so the UI can offer a sign-in redirect. */
+  loginFlow: boolean;
   subject?: string;
   name?: string;
   roles: string[];
@@ -68,8 +70,24 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Full-page URL that starts the OIDC browser login. The control plane redirects
+ * to the identity provider and sets an HttpOnly session cookie on return.
+ */
+export function loginUrl(): string {
+  return `${API_URL}/auth/login`;
+}
+
+/** Full-page URL that clears the server session cookie. */
+export function logoutUrl(): string {
+  return `${API_URL}/auth/logout`;
+}
+
 export async function fetchServices(): Promise<ServiceInfo[]> {
-  const res = await fetch(`${API_URL}/api/services`, { headers: authHeaders() });
+  const res = await fetch(`${API_URL}/api/services`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   if (!res.ok) {
     throw new ApiError(res.status, `services request failed: ${res.status}`);
   }
@@ -78,7 +96,10 @@ export async function fetchServices(): Promise<ServiceInfo[]> {
 }
 
 export async function fetchMe(): Promise<Me> {
-  const res = await fetch(`${API_URL}/api/me`, { headers: authHeaders() });
+  const res = await fetch(`${API_URL}/api/me`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   if (!res.ok) {
     throw new ApiError(res.status, `me request failed: ${res.status}`);
   }
@@ -88,6 +109,7 @@ export async function fetchMe(): Promise<Me> {
 export async function fetchServiceDetail(id: string): Promise<ServiceDetail> {
   const res = await fetch(`${API_URL}/api/services/${encodeURIComponent(id)}`, {
     headers: authHeaders(),
+    credentials: 'include',
   });
   if (!res.ok) {
     throw new ApiError(res.status, `service detail request failed: ${res.status}`);

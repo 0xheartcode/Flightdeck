@@ -1,5 +1,8 @@
 import { createHmac } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
+import { unsign } from './oidclogin.js';
 import { AuditLog } from './audit.js';
 import { CommandBus } from './commands.js';
 import type { Config } from './config.js';
@@ -53,6 +56,14 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     oidcRolesClaim: 'roles',
     operatorRoles: [],
     adminRoles: [],
+    oidcClientId: '',
+    oidcClientSecret: '',
+    oidcAuthEndpoint: '',
+    oidcTokenEndpoint: '',
+    oidcRedirectUri: '',
+    oidcScopes: 'openid profile email',
+    sessionSecret: '',
+    webAppUrl: 'http://localhost:5173',
     ...overrides,
   };
 }
@@ -216,5 +227,74 @@ describe('http api', () => {
 
     // Contrast: the authed /api/health still requires a token when identity is on.
     expect((await app.request('/api/health')).status).toBe(401);
+  });
+
+  it('completes the OIDC login flow and authenticates via the session cookie', async () => {
+    const idToken = mintHs256(
+      { sub: 'alice', name: 'Alice', roles: ['admin'], exp: future },
+      SECRET,
+    );
+    // Mock IdP token endpoint returns the id_token for any code.
+    const idp = createServer((_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ id_token: idToken, token_type: 'Bearer' }));
+    });
+    await new Promise<void>((r) => idp.listen(0, '127.0.0.1', r));
+    const { port } = idp.address() as AddressInfo;
+
+    try {
+      const ctx = makeContext(
+        makeConfig({
+          oidcHs256Secret: SECRET,
+          oidcClientId: 'cid',
+          oidcAuthEndpoint: 'https://idp.example/authorize',
+          oidcTokenEndpoint: `http://127.0.0.1:${port}/token`,
+          oidcRedirectUri: 'http://cp.example/auth/callback',
+          sessionSecret: 'sess-secret',
+          webAppUrl: 'http://web.example',
+          adminRoles: ['admin'],
+        }),
+      );
+      const app = createHttpApp(ctx, () => 0);
+
+      // 1. Login redirects to the IdP and sets a signed state cookie.
+      const login = await app.request('/auth/login');
+      expect(login.status).toBe(302);
+      expect(login.headers.get('location')).toContain('https://idp.example/authorize');
+      const loginVal = (login.headers.get('set-cookie') ?? '')
+        .split(';')[0]!
+        .split('=')
+        .slice(1)
+        .join('=');
+      const saved = JSON.parse(unsign('sess-secret', loginVal) ?? '{}') as { state: string };
+
+      // 2. Callback exchanges the code (at the mock IdP), verifies, sets the session.
+      const cb = await app.request(
+        `/auth/callback?code=abc&state=${encodeURIComponent(saved.state)}`,
+        { headers: { Cookie: `fd_login=${loginVal}` } },
+      );
+      expect(cb.status).toBe(302);
+      expect(cb.headers.get('location')).toBe('http://web.example');
+      expect(cb.headers.get('set-cookie') ?? '').toContain('fd_session=');
+
+      // 3. The session cookie authenticates /api/me.
+      const me = await app.request('/api/me', { headers: { Cookie: `fd_session=${idToken}` } });
+      expect(me.status).toBe(200);
+      const body = (await me.json()) as {
+        subject: string;
+        loginFlow: boolean;
+        permissions: string[];
+      };
+      expect(body).toMatchObject({ subject: 'alice', loginFlow: true });
+      expect(body.permissions).toContain('reveal');
+
+      // A bad state is rejected.
+      const bad = await app.request('/auth/callback?code=abc&state=wrong', {
+        headers: { Cookie: `fd_login=${loginVal}` },
+      });
+      expect(bad.status).toBe(400);
+    } finally {
+      await new Promise<void>((r) => idp.close(() => r()));
+    }
   });
 });

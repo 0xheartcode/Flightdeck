@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- OIDC browser login: an authorization-code + PKCE flow so users sign in with
+  the identity provider instead of pasting a JWT. `/auth/login` redirects to the
+  provider, `/auth/callback` exchanges the code and stores the provider's
+  id_token in an HttpOnly session cookie, and `/api` and `/stream` accept that
+  cookie. Enabled by `FD_OIDC_CLIENT_ID` + endpoints + `FD_SESSION_SECRET`; the
+  token is still verified with the configured keys/JWKS. The UI shows a Sign in
+  button. Uses only node:crypto and fetch (no new dependency).
 - Multi-arch agent image: `docker/Dockerfile.agent` now builds for both
   `linux/amd64` and `linux/arm64`. The Rust binary is cross-compiled on the
   native build host (fast, no emulation; `ring` cross-compiles cleanly) and CI

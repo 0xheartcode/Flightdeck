@@ -47,6 +47,7 @@ export function App() {
           <TokenBar
             identityEnabled={identityEnabled}
             authenticated={authenticated}
+            loginFlow={me?.loginFlow ?? false}
             name={me?.name ?? me?.subject}
           />
         </div>
