@@ -1,23 +1,30 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { clearToken, setToken } from '@/api';
+import { clearToken, loginUrl, logoutUrl, setToken } from '@/api';
 
 interface Props {
   /** Whether the control plane has identity enforcement turned on. */
   identityEnabled: boolean;
   /** True when identity is on and the caller is signed in with a valid token. */
   authenticated: boolean;
+  /**
+   * True when the control plane has OIDC browser login configured. Swaps the
+   * paste-a-token field for a redirect-based sign-in and makes sign-out clear
+   * the server session cookie.
+   */
+  loginFlow: boolean;
   /** Display name of the signed-in caller (falls back to the subject). */
   name?: string;
 }
 
 /**
  * Header control for runtime authentication. Hidden entirely when identity is
- * disabled. When signed out it offers a token field; when signed in it shows
- * the caller and a sign-out button. Either action refetches every query so the
- * rest of the UI reflects the new permissions.
+ * disabled. When signed out it offers either a browser-login redirect (OIDC) or
+ * a token field; when signed in it shows the caller and a sign-out control.
+ * Either action refetches every query so the rest of the UI reflects the new
+ * permissions.
  */
-export function TokenBar({ identityEnabled, authenticated, name }: Props) {
+export function TokenBar({ identityEnabled, authenticated, loginFlow, name }: Props) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState('');
 
@@ -34,6 +41,12 @@ export function TokenBar({ identityEnabled, authenticated, name }: Props) {
   };
 
   const signOut = (): void => {
+    // With browser login the session lives in a server cookie, so clearing the
+    // local token is not enough; redirect through the control plane to drop it.
+    if (loginFlow) {
+      window.location.href = logoutUrl();
+      return;
+    }
     clearToken();
     void queryClient.invalidateQueries();
   };
@@ -52,6 +65,20 @@ export function TokenBar({ identityEnabled, authenticated, name }: Props) {
           Sign out
         </button>
       </div>
+    );
+  }
+
+  if (loginFlow) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          window.location.href = loginUrl();
+        }}
+        className="shrink-0 rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100"
+      >
+        Sign in
+      </button>
     );
   }
 
