@@ -170,17 +170,23 @@ export type AgentMessage = z.infer<typeof AgentMessage>;
 
 // --- Control plane -> agent (commands) -------------------------------------
 
-/** Actions an operator can trigger. Allowlisted: no arbitrary execution. */
+/** Simple actions a browser triggers with no payload. Allowlisted. */
 export const ActionKind = z.enum(['restart', 'redeploy']);
 export type ActionKind = z.infer<typeof ActionKind>;
+
+/** Everything the control plane can command an agent to do (adds set_env). */
+export const CommandAction = z.enum(['restart', 'redeploy', 'set_env']);
+export type CommandAction = z.infer<typeof CommandAction>;
 
 export const ServerCommand = z.object({
   v: z.literal(PROTOCOL_VERSION),
   type: z.literal('command'),
   id: z.string().max(128),
-  action: ActionKind,
+  action: CommandAction,
   serviceId: z.string().max(256),
   containerId: z.string().max(128),
+  /** New environment for a set_env command: the container is recreated with it. */
+  env: z.array(EnvVar).max(1000).optional(),
 });
 export type ServerCommand = z.infer<typeof ServerCommand>;
 
@@ -202,10 +208,18 @@ export const ClientAction = z.object({
   serviceId: z.string().min(1).max(256),
 });
 
+/** Replace a service's environment and recreate its container. Admin-gated. */
+export const ClientSetEnv = z.object({
+  type: z.literal('set_env'),
+  serviceId: z.string().min(1).max(256),
+  env: z.array(EnvVar).max(1000),
+});
+
 export const ClientMessage = z.discriminatedUnion('type', [
   ClientSubscribe,
   ClientUnsubscribe,
   ClientAction,
+  ClientSetEnv,
 ]);
 export type ClientMessage = z.infer<typeof ClientMessage>;
 
@@ -243,7 +257,7 @@ export const ServerStats = z.object({
 export const ServerActionResult = z.object({
   type: z.literal('action_result'),
   serviceId: z.string(),
-  action: ActionKind,
+  action: CommandAction,
   ok: z.boolean(),
   error: z.string().optional(),
 });
