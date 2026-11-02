@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ActionKind,
+  CommandAction,
   DeployRecord,
+  EnvVar,
   LogLine,
   ServerMessage,
   ServiceState,
@@ -18,7 +20,7 @@ export interface LiveStatus {
 }
 
 export interface ActionResult {
-  action: ActionKind;
+  action: CommandAction;
   ok: boolean;
   error?: string;
 }
@@ -32,13 +34,14 @@ export interface LogStream {
   actionPending: boolean;
   deploy: DeployRecord | null;
   sendAction: (action: ActionKind) => void;
+  sendSetEnv: (env: EnvVar[]) => void;
 }
 
 /**
  * Open a WebSocket for the selected service: on connect, subscribe and receive
  * a snapshot of the recent tail, then stream new lines live. Reconnects with a
  * fixed backoff so a control-plane restart recovers on its own. Also sends
- * operator actions (restart) and surfaces their result.
+ * operator actions (restart, redeploy, set_env) and surfaces their result.
  */
 export function useLogStream(serviceId: string | null): LogStream {
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -128,5 +131,26 @@ export function useLogStream(serviceId: string | null): LogStream {
     [serviceId],
   );
 
-  return { logs, connected, stats, status, actionResult, actionPending, deploy, sendAction };
+  const sendSetEnv = useCallback(
+    (env: EnvVar[]) => {
+      const ws = wsRef.current;
+      if (!serviceId || !ws || ws.readyState !== WebSocket.OPEN) return;
+      setActionResult(null);
+      setActionPending(true);
+      ws.send(JSON.stringify({ type: 'set_env', serviceId, env }));
+    },
+    [serviceId],
+  );
+
+  return {
+    logs,
+    connected,
+    stats,
+    status,
+    actionResult,
+    actionPending,
+    deploy,
+    sendAction,
+    sendSetEnv,
+  };
 }
