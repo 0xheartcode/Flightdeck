@@ -1,17 +1,18 @@
 mod config;
 mod docker;
 mod protocol;
+mod systemd;
 mod ws;
 
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 
 use bollard::Docker;
-use tokio::sync::mpsc::Sender;
 
 use crate::config::Config;
 use crate::docker::now_ms;
@@ -31,17 +32,16 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = Config::load();
-    let docker = docker::connect(config.docker_host.as_deref())?;
     tracing::info!(
         url = %config.control_plane_url,
-        label = %config.label,
+        runtime = %config.runtime,
         host = %config.hostname,
         "flightdeck agent starting",
     );
 
     let (tx, rx) = mpsc::channel::<AgentMessage>(CHANNEL_CAPACITY);
-    // Commands flow control-plane -> ws task -> here, where the Docker handle lives.
-    let (cmd_tx, mut cmd_rx) = mpsc::channel::<IncomingCommand>(64);
+    // Commands flow control-plane -> ws task -> here, where the runtime lives.
+    let (cmd_tx, cmd_rx) = mpsc::channel::<IncomingCommand>(64);
     let agent_id = format!("{}-{}", config.hostname, std::process::id());
     let ws_handle = tokio::spawn(ws::run(
         config.control_plane_url.clone(),
@@ -52,6 +52,30 @@ async fn main() -> anyhow::Result<()> {
         cmd_tx,
     ));
 
+    match config.runtime.as_str() {
+        "docker" => {
+            let docker = docker::connect(config.docker_host.as_deref())?;
+            run_docker(&config, docker, tx, cmd_rx).await;
+        }
+        "systemd" => run_systemd(&config, tx, cmd_rx).await,
+        other => {
+            ws_handle.abort();
+            anyhow::bail!("unknown FD_RUNTIME '{other}' (expected 'docker' or 'systemd')");
+        }
+    }
+
+    ws_handle.abort();
+    Ok(())
+}
+
+/// Docker/Podman runtime loop: discover labelled containers, stream their logs
+/// and stats, and execute container actions.
+async fn run_docker(
+    config: &Config,
+    docker: Docker,
+    tx: Sender<AgentMessage>,
+    mut cmd_rx: Receiver<IncomingCommand>,
+) {
     // container_id -> running log + stats tasks
     let mut tasks: HashMap<String, Vec<JoinHandle<()>>> = HashMap::new();
     // container_id -> globally-unique service id (to announce removal)
@@ -172,11 +196,91 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     drop(tx);
-    ws_handle.abort();
-    Ok(())
 }
 
-/// Execute an allowlisted command from the control plane and report the result.
+/// systemd runtime loop: discover the configured units, follow their journals,
+/// and execute unit actions. Units are announced with the unit name as both the
+/// service id component and the "container id" an action targets.
+async fn run_systemd(
+    config: &Config,
+    tx: Sender<AgentMessage>,
+    mut cmd_rx: Receiver<IncomingCommand>,
+) {
+    tracing::info!(
+        units = config.systemd_units.len(),
+        "systemd runtime: tracking units"
+    );
+    // unit -> running journal task
+    let mut tasks: HashMap<String, JoinHandle<()>> = HashMap::new();
+    let mut announced: HashSet<String> = HashSet::new();
+    let mut tick = interval(Duration::from_secs(config.scan_interval.max(1)));
+
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("SIGINT received, shutting down");
+                break;
+            }
+            _ = wait_terminate() => {
+                tracing::info!("SIGTERM received, shutting down");
+                break;
+            }
+            Some(cmd) = cmd_rx.recv() => {
+                tokio::spawn(execute_systemd_command(cmd, tx.clone()));
+            }
+            _ = tick.tick() => {
+                tasks.retain(|_, h| !h.is_finished());
+                let found = systemd::discover(&config.systemd_units).await;
+
+                let mut seen: HashSet<String> = HashSet::new();
+                for unit in &found {
+                    seen.insert(unit.name.clone());
+                    let id = format!("{}/{}", config.hostname, unit.name);
+                    let _ = tx.try_send(AgentMessage::service(ServiceInfo {
+                        id: id.clone(),
+                        name: unit.name.clone(),
+                        image: unit.description.clone(),
+                        container_id: unit.name.clone(),
+                        state: unit.state.clone(),
+                        host: config.hostname.clone(),
+                        created_at: 0,
+                        repo: None,
+                        environment: None,
+                        env: None,
+                    }));
+                    let _ = tx.try_send(AgentMessage::status(id.clone(), unit.state.clone(), None, now_ms()));
+
+                    if !tasks.contains_key(&unit.name) {
+                        tracing::info!(service = %id, "tracking unit");
+                        let h = tokio::spawn(systemd::stream_logs(unit.name.clone(), id.clone(), tx.clone()));
+                        tasks.insert(unit.name.clone(), h);
+                        announced.insert(unit.name.clone());
+                    }
+                }
+
+                // A configured unit that is no longer found (removed) is dropped.
+                let gone: Vec<String> =
+                    announced.iter().filter(|n| !seen.contains(*n)).cloned().collect();
+                for name in gone {
+                    if let Some(h) = tasks.remove(&name) {
+                        h.abort();
+                    }
+                    announced.remove(&name);
+                    let id = format!("{}/{}", config.hostname, name);
+                    tracing::info!(service = %id, "unit gone");
+                    let _ = tx.try_send(AgentMessage::service_gone(id));
+                }
+            }
+        }
+    }
+
+    for h in tasks.values() {
+        h.abort();
+    }
+    drop(tx);
+}
+
+/// Execute an allowlisted container command and report the result.
 async fn execute_command(docker: Docker, cmd: IncomingCommand, tx: Sender<AgentMessage>) {
     if cmd.kind != "command" {
         return;
@@ -196,17 +300,46 @@ async fn execute_command(docker: Docker, cmd: IncomingCommand, tx: Sender<AgentM
         },
         other => Err(format!("unsupported action: {other}")),
     };
+    report_command(cmd.id, &cmd.action, outcome, &tx);
+}
+
+/// Execute a unit command (only restart applies) and report the result. The
+/// unit name is carried in the command's container id.
+async fn execute_systemd_command(cmd: IncomingCommand, tx: Sender<AgentMessage>) {
+    if cmd.kind != "command" {
+        return;
+    }
+    let outcome = match cmd.action.as_str() {
+        "restart" => systemd::restart(&cmd.container_id)
+            .await
+            .map_err(|e| e.to_string()),
+        "redeploy" | "set_env" => Err(format!(
+            "{} is not supported for the systemd runtime",
+            cmd.action
+        )),
+        other => Err(format!("unsupported action: {other}")),
+    };
+    report_command(cmd.id, &cmd.action, outcome, &tx);
+}
+
+/// Log and forward a command result.
+fn report_command(
+    id: String,
+    action: &str,
+    outcome: Result<(), String>,
+    tx: &Sender<AgentMessage>,
+) {
     let (ok, error) = match outcome {
         Ok(()) => {
-            tracing::info!(action = %cmd.action, container = %cmd.container_id, "command ok");
+            tracing::info!(action = %action, "command ok");
             (true, None)
         }
         Err(err) => {
-            tracing::warn!(action = %cmd.action, error = %err, "command failed");
+            tracing::warn!(action = %action, error = %err, "command failed");
             (false, Some(err))
         }
     };
-    let _ = tx.try_send(AgentMessage::command_result(cmd.id, ok, error));
+    let _ = tx.try_send(AgentMessage::command_result(id, ok, error));
 }
 
 /// Resolve when the process receives SIGTERM (container orchestrators send it

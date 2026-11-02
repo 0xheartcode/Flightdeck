@@ -40,6 +40,17 @@ pub struct Config {
     /// with the right role reveals them). Opt in only on trusted deployments.
     #[arg(long, env = "FD_COLLECT_ENV", default_value_t = false)]
     pub collect_env: bool,
+
+    /// Runtime backend: "docker" (Docker/Podman socket, the default) or
+    /// "systemd" (track systemd service units via systemctl/journalctl).
+    #[arg(long, env = "FD_RUNTIME", default_value = "docker")]
+    pub runtime: String,
+
+    /// For the systemd runtime: the service units to track, comma separated
+    /// (for example "nginx.service,myapp.service"). systemd has no labels, so
+    /// the units to monitor are listed explicitly.
+    #[arg(long, env = "FD_SYSTEMD_UNITS", value_delimiter = ',')]
+    pub systemd_units: Vec<String>,
 }
 
 impl Config {
