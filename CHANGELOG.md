@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- GitHub Actions deploy correlation: a signed `POST /github/webhook` ingests
+  `workflow_run` events, persists them in SQLite (`DeployStore`, `FD_DB_FILE`),
+  and correlates each to services by the `flightdeck.repo` label. Matching
+  services get the deploy pushed live, the UI shows a deploy status badge, and
+  `GET /api/deploys` serves the history.
+
 - Action audit trail: every operator action is recorded (who/what/when/outcome)
   to the structured log and `/api/audit`, and optionally appended as JSONL
   (`FD_AUDIT_LOG_FILE`) so it survives a restart.
@@ -38,6 +44,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- Rate limiting: a cap on concurrent WebSocket connections
+  (`FD_MAX_CONNECTIONS`) and on operator actions per browser per minute
+  (`FD_ACTION_RATE_PER_MIN`), checked before anything else so action spam cannot
+  flood the audit log.
 - Per-agent credentials: configure `name:token` pairs (file or inline) so each
   agent has its own token resolving to a named identity. Removing an agent's
   line revokes it: the control plane reloads credentials, rejects the token on

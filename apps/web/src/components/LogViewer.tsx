@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { ActionKind, LogLine, Stats } from '@flightdeck/protocol';
+import type { ActionKind, DeployRecord, DeployStatus, LogLine, Stats } from '@flightdeck/protocol';
 import type { ActionResult, LiveStatus } from '@/hooks/useLogStream';
 import { cx, formatBytes, formatTime } from '@/lib/format';
 
@@ -11,7 +11,28 @@ interface Props {
   status: LiveStatus | null;
   actionResult: ActionResult | null;
   actionPending: boolean;
+  deploy: DeployRecord | null;
   onAction: (action: ActionKind) => void;
+}
+
+const DEPLOY_COLORS: Record<DeployStatus, string> = {
+  success: 'bg-emerald-500/15 text-emerald-300',
+  failure: 'bg-rose-500/15 text-rose-300',
+  in_progress: 'bg-amber-500/15 text-amber-300',
+  pending: 'bg-slate-500/15 text-slate-300',
+  cancelled: 'bg-slate-600/20 text-slate-400',
+};
+
+function DeployBadge({ deploy }: { deploy: DeployRecord }) {
+  const label = `deploy ${deploy.status.replace('_', ' ')} ${deploy.sha.slice(0, 7)}`;
+  const className = cx('rounded px-1.5 py-0.5', DEPLOY_COLORS[deploy.status]);
+  return deploy.runUrl ? (
+    <a href={deploy.runUrl} target="_blank" rel="noreferrer" className={className}>
+      {label}
+    </a>
+  ) : (
+    <span className={className}>{label}</span>
+  );
 }
 
 export function LogViewer({
@@ -22,6 +43,7 @@ export function LogViewer({
   status,
   actionResult,
   actionPending,
+  deploy,
   onAction,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -56,6 +78,7 @@ export function LogViewer({
             exit {status.exitCode}
           </span>
         )}
+        {deploy && <DeployBadge deploy={deploy} />}
         {actionResult && (
           <span className={actionResult.ok ? 'text-emerald-400' : 'text-rose-400'}>
             {actionResult.ok

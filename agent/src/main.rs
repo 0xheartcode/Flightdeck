@@ -115,6 +115,8 @@ async fn main() -> anyhow::Result<()> {
                         state: container.state.clone(),
                         host: config.hostname.clone(),
                         created_at: container.created_at,
+                        repo: container.repo.clone(),
+                        environment: container.environment.clone(),
                     }));
                     let _ = tx.try_send(AgentMessage::status(
                         id.clone(),

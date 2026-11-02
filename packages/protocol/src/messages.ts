@@ -38,8 +38,30 @@ export const ServiceInfo = z.object({
   /** Hostname of the server this service runs on. */
   host: z.string().max(256),
   createdAt: z.number().int(),
+  /** `flightdeck.repo` label (owner/name), for deploy correlation. */
+  repo: z.string().max(256).optional(),
+  /** `flightdeck.environment` label, for deploy correlation. */
+  environment: z.string().max(128).optional(),
 });
 export type ServiceInfo = z.infer<typeof ServiceInfo>;
+
+/** A deployment observed from a CI provider (currently GitHub Actions). */
+export const DeployStatus = z.enum(['pending', 'in_progress', 'success', 'failure', 'cancelled']);
+export type DeployStatus = z.infer<typeof DeployStatus>;
+
+export const DeployRecord = z.object({
+  id: z.string(),
+  repo: z.string(),
+  environment: z.string().optional(),
+  sha: z.string(),
+  branch: z.string().optional(),
+  status: DeployStatus,
+  runUrl: z.string().optional(),
+  actor: z.string().optional(),
+  startedAt: z.number().int(),
+  updatedAt: z.number().int(),
+});
+export type DeployRecord = z.infer<typeof DeployRecord>;
 
 export const LogStream = z.enum(['stdout', 'stderr']);
 export type LogStream = z.infer<typeof LogStream>;
@@ -207,6 +229,12 @@ export const ServerActionResult = z.object({
   error: z.string().optional(),
 });
 
+export const ServerDeploy = z.object({
+  type: z.literal('deploy'),
+  serviceId: z.string(),
+  deploy: DeployRecord,
+});
+
 export const ServerMessage = z.discriminatedUnion('type', [
   ServerServices,
   ServerSnapshot,
@@ -214,6 +242,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   ServerStatus,
   ServerStats,
   ServerActionResult,
+  ServerDeploy,
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 

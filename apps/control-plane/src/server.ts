@@ -10,6 +10,7 @@ import { authorizeUpgrade } from './authorize.js';
 import { CredentialStore } from './credentials.js';
 import { CommandBus } from './commands.js';
 import { AuditLog } from './audit.js';
+import { DeployStore } from './deploys.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
 import { createHttpApp } from './http.js';
@@ -17,7 +18,12 @@ import { handleAgentConnection } from './agent-hub.js';
 import { handleClientConnection } from './client-hub.js';
 
 const REVOCATION_INTERVAL_MS = 15_000;
-const REASONS: Record<number, string> = { 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found' };
+const REASONS: Record<number, string> = {
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  404: 'Not Found',
+  503: 'Service Unavailable',
+};
 
 export interface ControlPlaneHandle {
   /** Resolves with the bound port once the server is listening. */
@@ -30,12 +36,14 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   const log = logger.child({ component: 'control-plane' });
 
   const credentials = new CredentialStore(config);
+  const deploys = new DeployStore(config.dbFile);
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
     commands: new CommandBus(config.actionTimeoutMs),
     audit: new AuditLog(config.auditMax, config.auditFile || undefined),
     metrics: new Metrics(),
+    deploys,
   };
 
   log.info(
@@ -50,9 +58,23 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   // credential can have its connection dropped.
   const liveAgents = new Map<WebSocket, string>();
 
+  // Total open WebSocket connections (agents + browsers), for the cap.
+  let connections = 0;
+  const track = (ws: WebSocket): void => {
+    connections += 1;
+    ws.on('close', () => {
+      connections -= 1;
+    });
+  };
+  const rejectUpgrade = (socket: Duplex, status: number): void => {
+    socket.write(`HTTP/1.1 ${status} ${REASONS[status] ?? 'Bad Request'}\r\n\r\n`);
+    socket.destroy();
+  };
+
   const app = createHttpApp(ctx, () => liveAgents.size);
 
   clientWss.on('connection', (ws, req: IncomingMessage) => {
+    track(ws);
     handleClientConnection(ws, ctx, req.socket.remoteAddress ?? 'unknown');
   });
 
@@ -85,16 +107,20 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     );
 
     if (!decision.ok) {
-      socket.write(
-        `HTTP/1.1 ${decision.status} ${REASONS[decision.status] ?? 'Bad Request'}\r\n\r\n`,
-      );
-      socket.destroy();
+      rejectUpgrade(socket, decision.status);
+      return;
+    }
+
+    if (connections >= config.maxConnections) {
+      log.warn({ connections }, 'connection cap reached; rejecting upgrade');
+      rejectUpgrade(socket, 503);
       return;
     }
 
     if (pathname === '/agent') {
       const agentName = decision.agentName ?? 'agent';
       agentWss.handleUpgrade(req, socket, head, (ws) => {
+        track(ws);
         liveAgents.set(ws, headerToken ?? '');
         ws.on('close', () => liveAgents.delete(ws));
         handleAgentConnection(ws, ctx, agentName);
@@ -122,6 +148,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
       clearInterval(revocationTimer);
       agentWss.close();
       clientWss.close();
+      deploys.close();
       server.close(() => resolve());
     });
 
