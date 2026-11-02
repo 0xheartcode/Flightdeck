@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- HA live fan-out: with `FD_DATABASE_URL` set, control-plane instances mirror
+  every live event (service list, status, logs, stats, deploys) to each other
+  and route commands across instances over Postgres LISTEN/NOTIFY. A browser on
+  any instance now sees the whole fleet and can restart/redeploy/edit-env a
+  service whose agent is connected to a different instance. Completes the HA
+  story (durable state was already shared via the Postgres deploy store). No new
+  dependency; single-instance deployments use a no-op bus.
 - Multi-runtime agent (systemd): the agent now selects a runtime via
   `FD_RUNTIME` ("docker", the default, or "systemd"). The systemd backend tracks
   the units listed in `FD_SYSTEMD_UNITS` through `systemctl`/`journalctl`: it
