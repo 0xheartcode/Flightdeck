@@ -61,10 +61,10 @@ fmt:
 # ---------------------------------------------------------------------------
 
 demo:
-    docker compose -f docker/compose.yaml up --build
+    docker compose --env-file .env -f docker/compose.yaml up --build
 
 demo-down:
-    docker compose -f docker/compose.yaml down -v
+    docker compose --env-file .env -f docker/compose.yaml down -v
 
 # Browser end-to-end smoke (Playwright). Separate from `check` because it builds
 # both apps and needs a browser: run `pnpm --filter @flightdeck/web exec playwright
