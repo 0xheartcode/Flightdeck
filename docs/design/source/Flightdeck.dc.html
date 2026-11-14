@@ -14,6 +14,10 @@
 <style>
 :root{--bg0:#f3f3f0;--bg1:#fff;--bg2:#fff;--bg3:#efefec;--bgc:#f8f8f6;--dot:#d9d9d4;--line:#e3e3df;--line2:#cfcfc9;--line3:#a5a5a0;--row:#eeeeea;--text:#191b1e;--text2:#53585e;--text3:#686d74;--code:#2b2f34;--accent:#f5b83d;--accent-h:#ffca5c;--ai:#8a5600;--green:#18794e;--red:#c5372c;--blue:#2f6fd0;--mute:#8b9096;--track:#e3e3df;--gbg:rgba(24,121,78,.1);--rbg:rgba(197,55,44,.08);--abg:rgba(245,184,61,.2);--nbg:rgba(20,20,20,.05);--shadow:0 1px 2px rgba(20,20,20,.05),0 3px 10px rgba(20,20,20,.04);--pop:0 16px 48px rgba(20,20,20,.18);--overlay:rgba(30,30,28,.28);--errrow:rgba(197,55,44,.06);--errfg:#a12b22;--warnfg:#7a4d00;--info:#b7c4dc;--wire:#b4b4ae;--seg:#fff;--segsh:0 1px 2px rgba(0,0,0,.14);--segtrack:#e9e9e5;--navon:#e6e6e1;--tagL:.5;--lane:rgba(255,255,255,.7)}
 :root[data-theme=dark]{--bg0:#0d0f12;--bg1:#13161b;--bg2:#191d23;--bg3:#20252d;--bgc:#0f1216;--dot:#232831;--line:#262b34;--line2:#333a45;--line3:#4a5361;--row:#1d2128;--text:#e9ecf1;--text2:#a3abb8;--text3:#7d8795;--code:#c9cfd8;--ai:#f5b83d;--green:#4ccb8f;--red:#f2665b;--blue:#6aa9ff;--mute:#a3abb8;--track:#2b313b;--gbg:rgba(76,203,143,.12);--rbg:rgba(242,102,91,.1);--abg:rgba(245,184,61,.1);--nbg:rgba(125,135,149,.12);--shadow:0 6px 18px rgba(0,0,0,.25);--pop:0 24px 64px rgba(0,0,0,.55);--overlay:rgba(5,6,8,.62);--errrow:rgba(242,102,91,.07);--errfg:#ffb4ad;--warnfg:#f3d596;--info:#3d5f9e;--wire:#3d4654;--seg:#2b313b;--segsh:none;--segtrack:#0f1216;--navon:#191d23;--tagL:.8;--lane:rgba(19,22,27,.75)}
+:root{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--ai);outline-offset:2px}
+button:disabled{pointer-events:auto}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 html,body{margin:0;height:100%;background:var(--bg0)}
 *{box-sizing:border-box}
 a{color:var(--ai);text-decoration:none}a:hover{color:var(--text)}
@@ -86,8 +90,12 @@ input,button{font-family:inherit}
         <button onClick="{{ r.go }}" style="background:{{ r.bg }};color:{{ r.color }};box-shadow:{{ r.sh }};border:0;border-radius:6px;padding:5px 10px;font-size:12.5px;font-weight:500;cursor:pointer">{{ r.label }}</button>
       </sc-for>
     </div>
+    <button onClick="{{ openSignals }}" title="Signals" aria-label="Signals" style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:7px;color:var(--text2);font-size:18px;cursor:pointer;flex:none" style-hover="background:var(--navon);color:var(--text)"><i class="ph {{ bellIcon }}"></i><sc-if value="{{ hasUnread }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:0;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--red);color:var(--bg1);font-size:10.5px;font-weight:700;line-height:16px;text-align:center;font-variant-numeric:tabular-nums">{{ unreadTxt }}</span></sc-if></button>
     <button onClick="{{ toggleTheme }}" title="Switch theme" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:7px;color:var(--text2);font-size:17px;cursor:pointer" style-hover="background:var(--navon);color:var(--text)"><i class="ph {{ themeIcon }}"></i></button>
   </header>
+  <sc-if value="{{ isMuted }}" hint-placeholder-val="{{ false }}">
+  <div role="status" style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px 8px 16px;background:var(--abg);border-bottom:1px solid var(--line);font-size:13px"><i class="ph ph-bell-slash" style="font-size:16px;color:var(--ai)"></i><span style="flex:1 1 260px"><span style="font-weight:600">Notifications muted {{ muteTxt }}.</span> Channels receive nothing; signals are still recorded in the inbox.</span><button onClick="{{ unmute }}" disabled="{{ roOp }}" title="{{ opTitle }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:4px 10px;opacity:{{ opOp }};cursor:{{ opCur }}" style-hover="border-color:var(--line3)">Unmute</button></div>
+  </sc-if>
 
   <div style="flex:1;min-height:0;display:flex">
 
@@ -264,6 +272,180 @@ docker run -d --label flightdeck.enable=true \
       </div>
       </sc-if>
 
+      <sc-if value="{{ pageTx }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Transmitter" style="flex:1;overflow:auto">
+        <div style="max-width:980px;margin:0 auto;padding:40px 32px 72px;display:flex;flex-direction:column;gap:22px">
+          <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:240px"><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em">Transmitter</h1><div style="color:var(--text2);margin-top:6px">Events come in from sources, routes decide who hears about them, channels deliver.</div></div>
+            <div style="position:relative;flex:none">
+              <button onClick="{{ muteBtn }}" disabled="{{ roOp }}" title="{{ opTitle }}" aria-haspopup="menu" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;opacity:{{ opOp }};cursor:{{ opCur }}" style-hover="border-color:var(--line3)"><i class="ph {{ muteIcon }}"></i><span>{{ muteLabel }}</span></button>
+              <sc-if value="{{ muteMenu }}" hint-placeholder-val="{{ false }}"><div role="menu" style="position:absolute;top:38px;right:0;width:190px;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:5px;box-shadow:var(--pop);z-index:20;animation:fdUp .14s ease-out"><sc-for list="{{ muteOpts }}" as="o" hint-placeholder-count="3"><button role="menuitem" onClick="{{ o.go }}" style="width:100%;background:none;border:0;color:var(--text);font-size:13.5px;padding:8px 10px;border-radius:6px;cursor:pointer;text-align:left" style-hover="background:var(--bg3)">{{ o.label }}</button></sc-for></div></sc-if>
+            </div>
+          </div>
+          <div style="display:flex;gap:22px;border-bottom:1px solid var(--line)"><sc-for list="{{ txTabs }}" as="t" hint-placeholder-count="4"><sc-if value="{{ t.arrow }}" hint-placeholder-val="{{ false }}"><i class="ph ph-arrow-right" style="align-self:center;font-size:13px;color:var(--text3);margin:0 -10px"></i></sc-if><button onClick="{{ t.go }}" style="display:flex;align-items:center;gap:7px;background:none;border:0;border-bottom:2px solid {{ t.line }};color:{{ t.color }};padding:10px 1px;margin-bottom:-1px;font-size:14px;font-weight:500;cursor:pointer"><span>{{ t.label }}</span><span style="font-size:12.5px;font-weight:400;color:var(--text3)">{{ t.count }}</span></button></sc-for></div>
+
+          <sc-if value="{{ txLoading }}" hint-placeholder-val="{{ false }}">
+            <div aria-busy="true" aria-label="Loading" style="border:1px solid var(--line);border-radius:10px;overflow:hidden"><sc-for list="{{ skel }}" as="k" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:12px;padding:15px 16px;border-bottom:1px solid var(--row);margin-bottom:-1px;animation:fdPulse 1.4s ease-in-out infinite"><span style="width:8px;height:8px;border-radius:50%;background:var(--line2)"></span><span style="height:10px;width:{{ k.w }};background:var(--bg3);border-radius:5px"></span><span style="flex:1"></span><span style="height:10px;width:56px;background:var(--bg3);border-radius:5px"></span></div></sc-for></div>
+          </sc-if>
+
+          <sc-if value="{{ txSignals }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="flex:1 1 200px;display:flex;align-items:center;gap:8px;background:var(--bgc);border:1px solid var(--line);border-radius:7px;padding:0 10px"><i class="ph ph-magnifying-glass" style="color:var(--text3)"></i><input value="{{ sf.q }}" onChange="{{ sfOn.q }}" placeholder="Search signals" aria-label="Search signals" style="flex:1;min-width:0;background:none;border:0;outline:none;color:var(--text);font-size:13px;padding:7px 0"></div>
+                <select value="{{ sf.sev }}" onChange="{{ sfOn.sev }}" aria-label="Severity" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any severity</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="success">Success</option><option value="info">Info</option></select><select value="{{ sf.type }}" onChange="{{ sfOn.type }}" aria-label="Event type" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any type</option><option value="service">Services</option><option value="deploy">Deploys</option><option value="agent">Agents</option><option value="security">Env, tokens, sign-in</option><option value="alert">External alerts</option></select><select value="{{ sf.project }}" onChange="{{ sfOn.project }}" aria-label="Project" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any project</option><option value="storefront">storefront</option><option value="telemetry">telemetry</option><option value="internal">internal</option></select><select value="{{ sf.host }}" onChange="{{ sfOn.host }}" aria-label="Host" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any host</option><option value="atlas">atlas</option><option value="vega">vega</option><option value="orion">orion</option></select><select value="{{ sf.range }}" onChange="{{ sfOn.range }}" aria-label="Time range" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">All time</option><option value="1h">Last hour</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option></select>
+                <button onClick="{{ readAll }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="border-color:var(--line3)"><i class="ph ph-checks"></i><span>Mark all read</span></button>
+              </div>
+              <sc-for list="{{ sigGroups }}" as="g" hint-placeholder-count="2">
+                <div style="display:flex;flex-direction:column;gap:10px"><div style="font-size:15px;font-weight:600">{{ g.label }}</div><div style="border:1px solid var(--line);border-radius:10px;overflow:hidden"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:12px;padding:10px 8px 10px 14px;border-bottom:1px solid var(--row);margin-bottom:-1px">
+  <span title="{{ r.sevLabel }}" style="width:8px;height:8px;border-radius:50%;background:{{ r.sevColor }};flex:none"></span>
+  <i class="ph {{ r.icon }}" style="font-size:18px;color:var(--text2);flex:none"></i>
+  <div style="flex:1;min-width:0"><div style="font-weight:{{ r.fw }};color:{{ r.fg }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</div><div style="font-size:12.5px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ctx }}</div></div>
+  <span style="flex:none;font-size:12.5px;color:var(--text3);white-space:nowrap;font-variant-numeric:tabular-nums">{{ r.when }}</span>
+  <sc-if value="{{ r.unread }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.markRead }}" title="Mark read" aria-label="Mark read" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-check"></i></button></sc-if>
+  <button onClick="{{ r.open }}" title="Open what this is about" aria-label="Open" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-arrow-right"></i></button>
+</div></sc-for></div></div>
+              </sc-for>
+              <sc-if value="{{ sigEmpty }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px dashed var(--line2);border-radius:10px;padding:40px 24px"><i class="ph ph-moon-stars" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600">All quiet</div><div style="color:var(--text2);max-width:440px;line-height:1.5">{{ sigEmptyTxt }}</div></div></sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ txSources }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:240px;color:var(--text2);line-height:1.5;max-width:600px">Where events come from. Outside systems such as flightdeck-watcher or Grafana push alerts to an ingest URL with a bearer token.</div><button onClick="{{ addSource }}" disabled="{{ ro }}" title="{{ roTitle }}" style="display:flex;align-items:center;gap:8px;background:var(--accent);color:#14100a;border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;opacity:{{ admOp }};cursor:{{ admCur }}"><i class="ph ph-plus"></i><span>Add incoming source</span></button></div>
+              <sc-if value="{{ ro }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);background:var(--nbg);border-radius:8px;padding:9px 12px"><i class="ph ph-lock-simple" style="font-size:15px"></i><span>Read-only: adding sources and revealing ingest tokens needs the admin role.</span></div></sc-if>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:14px 16px">
+                <div style="width:34px;height:34px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none"><i class="ph ph-lightning"></i></div>
+                <div style="flex:1 1 240px;min-width:0"><div style="font-size:15px;font-weight:600">Flightdeck events</div><div style="font-size:13px;color:var(--text2);margin-top:2px">Service, deploy, agent, env, token and sign-in events from this control plane.</div></div>
+                <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);background:var(--bg3);border-radius:20px;padding:3px 10px"><span style="width:7px;height:7px;border-radius:50%;background:var(--green)"></span><span>Built in, always on</span></span>
+              </div>
+              <sc-for list="{{ sourceRows }}" as="s" hint-placeholder-count="2">
+                <div style="border:1px solid var(--line);border-radius:10px;background:var(--bg2);overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:14px;padding:14px 10px 14px 16px">
+                    <div style="width:34px;height:34px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none"><i class="ph ph-webhooks-logo"></i></div>
+                    <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600">{{ s.name }}</div><div style="font-size:13px;color:var(--text2);margin-top:2px">Inbound webhook · {{ s.kind }} · {{ s.last }}</div></div>
+                    <button onClick="{{ s.del }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Delete source" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-trash"></i></button>
+                  </div>
+                  <sc-if value="{{ s.fresh }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px 9px 16px;background:var(--abg);font-size:13px"><i class="ph ph-warning" style="color:var(--ai);font-size:16px"></i><span style="flex:1 1 220px">New token. Copy it now; once you dismiss this it stays masked and every reveal is audited.</span><button onClick="{{ s.copyTok }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:4px 10px" style-hover="border-color:var(--line3)"><i class="ph ph-copy"></i><span>Copy token</span></button><button onClick="{{ s.done }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:4px 10px" style-hover="border-color:var(--line3)">Done</button></div></sc-if>
+                  <div style="display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:8px 10px 10px 16px;border-top:1px solid var(--row);font-size:13px">
+                    <span style="color:var(--text3)">Ingest URL</span><span style="font:12.5px 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.url }}</span><button onClick="{{ s.copyUrl }}" title="Copy URL" aria-label="Copy URL" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-copy"></i></button>
+                    <span style="color:var(--text3)">Token</span><span style="font:12.5px 'JetBrains Mono',monospace;color:{{ s.tokFg }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.token }}</span><button onClick="{{ s.reveal }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Reveal or hide token" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ s.eye }}"></i></button>
+                  </div>
+                  <div style="position:relative;border-top:1px solid var(--row);background:var(--bgc)"><pre style="margin:0;padding:14px 56px 14px 16px;font:12px/1.7 'JetBrains Mono',monospace;color:var(--code);overflow:auto">{{ s.curl }}</pre><button onClick="{{ s.copyCurl }}" title="Copy curl example" aria-label="Copy curl example" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;position:absolute;top:8px;right:10px" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-copy"></i></button></div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noSources }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px dashed var(--line2);border-radius:10px;padding:40px 24px"><i class="ph ph-webhooks-logo" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600">Add an incoming source</div><div style="color:var(--text2);max-width:440px;line-height:1.5">Give flightdeck-watcher, Grafana or any other system an ingest URL and token, and its alerts show up here as signals.</div></div></sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ txRoutes }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:240px;color:var(--text2);line-height:1.5;max-width:600px">A route matches events and sends them to one or more channels. An event can match several routes.</div><button onClick="{{ addRoute }}" disabled="{{ ro }}" title="{{ roTitle }}" style="display:flex;align-items:center;gap:8px;background:var(--accent);color:#14100a;border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;opacity:{{ admOp }};cursor:{{ admCur }}"><i class="ph ph-plus"></i><span>Add route</span></button></div>
+              <sc-if value="{{ ro }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);background:var(--nbg);border-radius:8px;padding:9px 12px"><i class="ph ph-lock-simple" style="font-size:15px"></i><span>Read-only: editing routes needs the admin role. Operators can mute a route.</span></div></sc-if>
+              <sc-for list="{{ routeRows }}" as="r" hint-placeholder-count="3">
+                <div style="border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:12px 10px 14px 16px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;align-items:center;gap:6px"><span style="font-size:15px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                    <sc-if value="{{ r.muted }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:500;color:var(--ai);background:var(--abg);border-radius:20px;padding:3px 10px;margin-right:4px">Muted</span></sc-if>
+                    <button onClick="{{ r.toggleMute }}" disabled="{{ roOp }}" title="{{ opTitle }}" aria-label="{{ r.muteTitle }}" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ opOp }};cursor:{{ opCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ r.muteIcon }}"></i></button>
+                    <button onClick="{{ r.edit }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Edit route" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-pencil-simple"></i></button>
+                    <button onClick="{{ r.del }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Delete route" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-trash"></i></button></div>
+                  <div style="display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;opacity:{{ r.op }}">
+                    <div style="flex:1 1 280px;display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ r.match }}" as="m" hint-placeholder-count="3"><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);background:var(--bg3);border-radius:20px;padding:3px 10px">{{ m.t }}</span></sc-for></div>
+                    <i class="ph ph-arrow-right" style="color:var(--text3);font-size:16px"></i>
+                    <div style="flex:1 1 200px;display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ r.chans }}" as="c" hint-placeholder-count="2"><span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);background:var(--bg3);border-radius:20px;padding:3px 10px;color:var(--text);background:none;border:1px solid var(--line2);padding:2px 10px 2px 8px"><i class="ph {{ c.icon }}" style="font-size:14px"></i><span>{{ c.name }}</span></span></sc-for><sc-if value="{{ r.noChans }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--red)">No channel, nothing is sent</span></sc-if></div>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--text3)">{{ r.opts }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noRoutes }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px dashed var(--line2);border-radius:10px;padding:40px 24px"><i class="ph ph-arrows-split" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600">No routes yet</div><div style="color:var(--text2);max-width:440px;line-height:1.5">Events are recorded as signals but sent nowhere until a route connects them to a channel.</div></div></sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ txChannels }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:240px;color:var(--text2);line-height:1.5;max-width:600px">Destinations Transmitter delivers to. Secrets stay masked; every reveal is audited.</div><button onClick="{{ addChannel }}" disabled="{{ ro }}" title="{{ roTitle }}" style="display:flex;align-items:center;gap:8px;background:var(--accent);color:#14100a;border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;opacity:{{ admOp }};cursor:{{ admCur }}"><i class="ph ph-plus"></i><span>Add channel</span></button></div>
+              <sc-if value="{{ ro }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);background:var(--nbg);border-radius:8px;padding:9px 12px"><i class="ph ph-lock-simple" style="font-size:15px"></i><span>{{ chRoTxt }}</span></div></sc-if>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px">
+                <sc-for list="{{ channelCards }}" as="c" hint-placeholder-count="4">
+                  <div style="background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 12px 10px 16px;display:flex;flex-direction:column;gap:12px">
+                    <div style="display:flex;align-items:center;gap:12px;padding-right:4px">
+                      <div style="width:34px;height:34px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none"><i class="ph {{ c.icon }}"></i></div>
+                      <div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.name }}</div><div style="font-size:12.5px;color:var(--text3)">{{ c.typeLabel }}</div></div>
+                      <button role="switch" aria-checked="{{ c.enabled }}" aria-label="Enabled" onClick="{{ c.toggle }}" disabled="{{ ro }}" title="{{ roTitle }}" style="width:34px;height:20px;border-radius:10px;border:0;padding:2px;background:{{ c.swBg }};display:flex;justify-content:{{ c.swJ }};flex:none;cursor:pointer;opacity:{{ admOp }};cursor:{{ admCur }}"><span style="width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)"></span></button>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:9px;min-height:40px;padding-right:4px"><span style="width:7px;height:7px;border-radius:50%;background:{{ c.stColor }};flex:none;margin-top:6px"></span><div style="min-width:0"><div style="font-size:13px;font-weight:500;color:{{ c.stColor }}">{{ c.stTitle }}</div><div style="font-size:12.5px;color:var(--text3);margin-top:2px;line-height:1.4">{{ c.stDetail }}</div></div></div>
+                    <div style="display:flex;align-items:center;gap:10px;background:var(--bgc);border-radius:7px;padding:2px 2px 2px 10px;font:12px 'JetBrains Mono',monospace"><span style="color:var(--text3);flex:none">{{ c.secKey }}</span><span style="flex:1;min-width:0;color:{{ c.secFg }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.secVal }}</span><button onClick="{{ c.reveal }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Reveal or hide secret" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ c.eye }}"></i></button></div>
+                    <div style="display:flex;align-items:center;gap:4px;border-top:1px solid var(--row);padding-top:10px">
+                      <button onClick="{{ c.test }}" disabled="{{ roOp }}" title="{{ opTitle }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;opacity:{{ opOp }};cursor:{{ opCur }}" style-hover="border-color:var(--line3)"><i class="ph ph-paper-plane-tilt"></i><span>Send test</span></button>
+                      <span style="flex:1"></span>
+                      <button onClick="{{ c.edit }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Edit channel" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-pencil-simple"></i></button>
+                      <button onClick="{{ c.del }}" disabled="{{ ro }}" title="{{ roTitle }}" aria-label="Delete channel" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;opacity:{{ admOp }};cursor:{{ admCur }}" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-trash"></i></button>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ noChannels }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px dashed var(--line2);border-radius:10px;padding:40px 24px"><i class="ph ph-paper-plane-tilt" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600">Add your first channel</div><div style="color:var(--text2);max-width:440px;line-height:1.5">Telegram, email, Discord, Slack, a generic webhook or a custom connector. Until one exists, signals stay in the inbox only.</div></div></sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ pageActivity }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Activity" style="flex:1;overflow:auto">
+        <div style="max-width:980px;margin:0 auto;padding:40px 32px 72px;display:flex;flex-direction:column;gap:22px">
+          <div><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em">Activity</h1><div style="color:var(--text2);margin-top:6px">Every audited action, newest first.</div></div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select value="{{ af.actor }}" onChange="{{ afOn.actor }}" aria-label="Actor" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Anyone</option><option value="mira">mira@acme.dev</option><option value="jonas">jonas@acme.dev</option><option value="lea">lea@acme.dev</option></select>
+            <select value="{{ af.action }}" onChange="{{ afOn.action }}" aria-label="Action" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any action</option><option value="service.restart">service.restart</option><option value="service.redeploy">service.redeploy</option><option value="env.update">env.update (set_env)</option><option value="env.reveal">env.reveal</option><option value="token.create">token.create</option><option value="token.revoke">token.revoke</option><option value="auth.login">auth.login</option><option value="transmitter">Transmitter changes</option></select>
+            <select value="{{ af.result }}" onChange="{{ afOn.result }}" aria-label="Result" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any result</option><option value="ok">Ok</option><option value="failed">Failed</option><option value="denied">Denied</option></select>
+            <select value="{{ af.range }}" onChange="{{ afOn.range }}" aria-label="Time range" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">All time</option><option value="1h">Last hour</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option></select>
+            <span style="flex:1"></span><span style="font-size:13px;color:var(--text3);font-variant-numeric:tabular-nums">{{ actCount }}</span>
+          </div>
+          <div style="border:1px solid var(--line);border-radius:10px;overflow-x:auto"><div style="min-width:800px">
+            <div style="display:grid;grid-template-columns:104px 1.1fr 84px 1.1fr 1.6fr 80px;gap:12px;padding:10px 16px;font-size:12.5px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--line);background:var(--bgc)"><span>Time</span><span>Actor</span><span>Role</span><span>Action</span><span>Target</span><span>Result</span></div>
+            <sc-for list="{{ activityRows }}" as="a" hint-placeholder-count="8">
+              <div style="display:grid;grid-template-columns:104px 1.1fr 84px 1.1fr 1.6fr 80px;gap:12px;align-items:center;padding:9px 16px;font-size:13.5px;border-bottom:1px solid var(--row);margin-bottom:-1px">
+                <span><span style="display:block">{{ a.when }}</span><span style="display:block;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums">{{ a.at }}</span></span>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.user }}</span><span style="color:var(--text2);text-transform:capitalize">{{ a.role }}</span><span style="font:12.5px 'JetBrains Mono',monospace">{{ a.action }}</span><span style="color:var(--text2)">{{ a.target }}</span>
+                <span style="display:flex"><span style="font-size:12px;font-weight:500;color:{{ a.rc }};background:{{ a.rb }};border-radius:20px;padding:3px 10px;text-transform:capitalize">{{ a.result }}</span></span>
+              </div>
+            </sc-for>
+            <sc-if value="{{ actEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:28px 16px;text-align:center;color:var(--text2)">No audited actions match these filters.</div></sc-if>
+          </div></div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ pageDeploys }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Deploys" style="flex:1;overflow:auto">
+        <div style="max-width:1120px;margin:0 auto;padding:40px 32px 72px;display:flex;flex-direction:column;gap:26px">
+          <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:240px"><h1 style="margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em">Deploys</h1><div style="color:var(--text2);margin-top:6px">GitHub Actions runs across every repository, matched to the services they build.</div></div>
+            <select value="{{ depF }}" onChange="{{ onDepF }}" aria-label="Status" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any status</option><option value="pending">Pending</option><option value="in_progress">In progress</option><option value="success">Success</option><option value="failure">Failure</option><option value="cancelled">Cancelled</option></select></div>
+          <sc-for list="{{ deployGroups }}" as="g" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:15px;font-weight:600">{{ g.project }}</span><span style="font:12px 'JetBrains Mono',monospace;color:var(--text3)">{{ g.repo }}</span></div>
+              <div style="border:1px solid var(--line);border-radius:10px;overflow-x:auto"><div style="min-width:960px">
+                <div style="display:grid;grid-template-columns:116px minmax(0,2.2fr) minmax(0,1fr) 62px minmax(0,1fr) 108px 66px 64px;gap:12px;padding:10px 16px;font-size:12.5px;font-weight:500;color:var(--text3);border-bottom:1px solid var(--line);background:var(--bgc)"><span>Status</span><span>Commit</span><span>Branch</span><span>Actor</span><span>Services</span><span>Started</span><span>Duration</span><span>CI run</span></div>
+                <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:116px minmax(0,2.2fr) minmax(0,1fr) 62px minmax(0,1fr) 108px 66px 64px;gap:12px;align-items:center;padding:10px 16px;font-size:13.5px;border-bottom:1px solid var(--row);margin-bottom:-1px">
+                    <span style="display:flex"><span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:{{ r.pc }};background:{{ r.pb }};border-radius:20px;padding:3px 10px 3px 8px;white-space:nowrap"><i class="ph {{ r.icon }}" style="font-size:13px"></i><span>{{ r.label }}</span></span></span>
+                    <div style="min-width:0"><div style="display:flex;gap:9px;align-items:baseline"><span style="font:12px 'JetBrains Mono',monospace;color:var(--text2);flex:none">{{ r.sha }}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.msg }}</span></div><sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:var(--ai);margin-top:2px">{{ r.note }}</div></sc-if></div>
+                    <span style="display:flex;align-items:center;gap:6px;min-width:0;font:12px 'JetBrains Mono',monospace;color:var(--text2)"><i class="ph ph-git-branch" style="font-size:14px;flex:none"></i><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.branch }}</span></span>
+                    <span>{{ r.actor }}</span>
+                    <span style="display:flex;flex-wrap:wrap;gap:4px"><sc-for list="{{ r.services }}" as="s" hint-placeholder-count="1"><button onClick="{{ s.go }}" style="background:var(--bg3);border:0;border-radius:20px;padding:3px 10px;font-size:12.5px;color:var(--text2);cursor:pointer" style-hover="color:var(--text)">{{ s.name }}</button></sc-for></span>
+                    <span><span style="display:block">{{ r.started }}</span><span style="display:block;font-size:12px;color:var(--text3)">{{ r.updated }}</span></span>
+                    <span style="color:var(--text2);font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+                    <a href="#" onClick="{{ r.openRun }}" style="display:flex;align-items:center;gap:4px;font-size:13px;white-space:nowrap"><span>{{ r.run }}</span><i class="ph ph-arrow-square-out"></i></a>
+                  </div>
+                </sc-for>
+              </div></div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ depEmpty }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px dashed var(--line2);border-radius:10px;padding:40px 24px"><i class="ph ph-rocket-launch" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600">No runs with this status</div><div style="color:var(--text2);max-width:440px;line-height:1.5">Pick another status to see the rest of the timeline.</div></div></sc-if>
+        </div>
+      </div>
+      </sc-if>
+
       <sc-if value="{{ pageServices }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Project services" style="flex:1;min-height:0;display:flex;flex-direction:column">
         <div style="flex:none;display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;padding:11px 16px 11px 20px;border-bottom:1px solid var(--line)">
@@ -370,16 +552,34 @@ docker run -d --label flightdeck.enable=true \
             <sc-if value="{{ dtabLogs }}" hint-placeholder-val="{{ false }}">
             <div style="flex:1;min-height:0;display:flex;flex-direction:column">
               <div style="flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 24px;border-bottom:1px solid var(--line)">
-                <div style="flex:1 1 180px;display:flex;align-items:center;gap:8px;background:var(--bgc);border:1px solid var(--line);border-radius:7px;padding:0 10px"><i class="ph ph-magnifying-glass" style="color:var(--text3)"></i><input value="{{ dq }}" onChange="{{ onDq }}" placeholder="Filter this service's logs" style="flex:1;min-width:0;background:none;border:0;outline:none;color:var(--text);font-size:13px;padding:7px 0"></div>
-                <button onClick="{{ toggleDerr }}" style="background:{{ derrBg }};border:1px solid {{ derrLine }};color:{{ derrColor }};border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer">Warnings &amp; errors</button>
-                <button onClick="{{ togglePause }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;min-width:84px" style-hover="border-color:var(--line3)"><span style="width:7px;height:7px;border-radius:50%;background:{{ liveColor }}"></span><span>{{ liveLabel }}</span></button>
+                <div style="display:flex;gap:2px;background:var(--segtrack);border-radius:8px;padding:2px;flex:none"><sc-for list="{{ logSeg }}" as="v" hint-placeholder-count="2"><button onClick="{{ v.go }}" style="background:{{ v.bg }};color:{{ v.color }};box-shadow:{{ v.sh }};border:0;border-radius:6px;padding:5px 11px;font-size:13px;font-weight:500;cursor:pointer">{{ v.label }}</button></sc-for></div>
+                <sc-if value="{{ logLive }}" hint-placeholder-val="{{ true }}">
+                  <div style="flex:1 1 160px;display:flex;align-items:center;gap:8px;background:var(--bgc);border:1px solid var(--line);border-radius:7px;padding:0 10px"><i class="ph ph-magnifying-glass" style="color:var(--text3)"></i><input value="{{ dq }}" onChange="{{ onDq }}" placeholder="Filter the live tail" aria-label="Filter the live tail" style="flex:1;min-width:0;background:none;border:0;outline:none;color:var(--text);font-size:13px;padding:7px 0"></div>
+                  <button onClick="{{ toggleDerr }}" style="background:{{ derrBg }};border:1px solid {{ derrLine }};color:{{ derrColor }};border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer">Warnings &amp; errors</button>
+                  <button onClick="{{ togglePause }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;min-width:84px" style-hover="border-color:var(--line3)"><span style="width:7px;height:7px;border-radius:50%;background:{{ liveColor }}"></span><span>{{ liveLabel }}</span></button>
+                </sc-if>
+                <sc-if value="{{ logHist }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1 1 160px;display:flex;align-items:center;gap:8px;background:var(--bgc);border:1px solid var(--line);border-radius:7px;padding:0 10px;opacity:{{ histOp }}"><i class="ph ph-clock-counter-clockwise" style="color:var(--text3)"></i><input value="{{ hq }}" onChange="{{ onHq }}" onKeyDown="{{ hKey }}" disabled="{{ histOff }}" placeholder="Search stored history" aria-label="Search stored history" style="flex:1;min-width:0;background:none;border:0;outline:none;color:var(--text);font-size:13px;padding:7px 0"></div>
+                  <select value="{{ hrange }}" onChange="{{ onHrange }}" disabled="{{ histOff }}" aria-label="Time range" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%;opacity:{{ histOp }}"><option value="1h">Last hour</option><option value="6h">Last 6 hours</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option></select>
+                  <button onClick="{{ runHistory }}" disabled="{{ histOff }}" style="display:flex;align-items:center;gap:8px;background:var(--accent);color:#14100a;border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;padding:7px 12px;font-size:13px;opacity:{{ histOp }}">Search</button>
+                </sc-if>
               </div>
-              <sc-if value="{{ d.hasLogNote }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:8px 24px;font-size:13px;color:{{ d.color }};background:var(--bgc);border-bottom:1px solid var(--line)">{{ d.logNote }}</div></sc-if>
-              <div ref="{{ logRef }}" style="flex:1;min-height:0;overflow:auto;padding:10px 0 16px;background:var(--bgc)">
-                <sc-for list="{{ d.logs }}" as="l" hint-placeholder-count="12">
-                  <div style="display:flex;gap:12px;padding:1px 20px 1px 16px;font:12px/1.65 'JetBrains Mono',monospace;background:{{ l.bg }}"><span style="width:3px;flex:none;background:{{ l.color }};border-radius:2px"></span><span style="color:var(--text3);flex:none">{{ l.t }}</span><span style="color:{{ l.fg }};white-space:pre-wrap;word-break:break-word;min-width:0">{{ l.msg }}</span></div>
-                </sc-for>
-              </div>
+              <sc-if value="{{ logLive }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ d.hasLogNote }}" hint-placeholder-val="{{ false }}"><div style="flex:none;padding:8px 24px;font-size:13px;color:{{ d.color }};background:var(--bgc);border-bottom:1px solid var(--line)">{{ d.logNote }}</div></sc-if>
+                <div ref="{{ logRef }}" style="flex:1;min-height:0;overflow:auto;padding:10px 0 16px;background:var(--bgc)"><sc-for list="{{ d.logs }}" as="l" hint-placeholder-count="12"><div style="display:flex;gap:12px;padding:1px 20px 1px 16px;font:12px/1.65 'JetBrains Mono',monospace;background:{{ l.bg }}"><span style="width:3px;flex:none;background:{{ l.color }};border-radius:2px"></span><span style="color:var(--text3);flex:none">{{ l.t }}</span><span style="color:{{ l.fg }};white-space:pre-wrap;word-break:break-word;min-width:0">{{ l.msg }}</span></div></sc-for></div>
+              </sc-if>
+              <sc-if value="{{ logHist }}" hint-placeholder-val="{{ false }}">
+                <div style="flex:1;min-height:0;overflow:auto;background:var(--bgc);display:flex;flex-direction:column">
+                  <sc-if value="{{ histOff }}" hint-placeholder-val="{{ false }}"><div style="margin:auto;padding:24px;width:100%;max-width:520px"><div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;border:1px dashed var(--line2);border-radius:10px;padding:40px 24px"><i class="ph ph-database" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600">History search is not configured</div><div style="color:var(--text2);max-width:440px;line-height:1.5">Flightdeck is only keeping the live tail. Connect a log store on the control plane to search older lines.</div><button onClick="{{ backToLive }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;margin-top:6px" style-hover="border-color:var(--line3)">Back to live tail</button></div></div></sc-if>
+                  <sc-if value="{{ histIdle }}" hint-placeholder-val="{{ false }}"><div style="margin:auto;padding:24px;text-align:center;color:var(--text2);max-width:420px;line-height:1.5">Search this service's stored logs. Pick a time range, add a term if you have one, then press Search.</div></sc-if>
+                  <sc-if value="{{ histLoading }}" hint-placeholder-val="{{ false }}"><div aria-busy="true" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><sc-for list="{{ skel }}" as="k" hint-placeholder-count="5"><span style="height:9px;width:{{ k.w }};background:var(--bg3);border-radius:5px;animation:fdPulse 1.4s ease-in-out infinite"></span></sc-for></div></sc-if>
+                  <sc-if value="{{ histDone }}" hint-placeholder-val="{{ false }}">
+                    <div style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 14px 8px 24px;font-size:13px;color:var(--text2);border-bottom:1px solid var(--line);background:var(--bg1)"><span style="flex:1 1 220px">{{ histTxt }}</span><button onClick="{{ backToLive }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:4px 10px" style-hover="border-color:var(--line3)">Back to live tail</button></div>
+                    <div style="flex:none;padding:10px 0 16px"><sc-for list="{{ histRows }}" as="l" hint-placeholder-count="12"><div style="display:flex;gap:12px;padding:1px 20px 1px 16px;font:12px/1.65 'JetBrains Mono',monospace;background:{{ l.bg }}"><span style="width:3px;flex:none;background:{{ l.color }};border-radius:2px"></span><span style="color:var(--text3);flex:none">{{ l.t }}</span><span style="color:{{ l.fg }};white-space:pre-wrap;word-break:break-word;min-width:0">{{ l.msg }}</span></div></sc-for></div>
+                    <sc-if value="{{ histNone }}" hint-placeholder-val="{{ false }}"><div style="padding:24px;text-align:center;color:var(--text2)">Nothing in stored history matches. Try a wider range or a different term.</div></sc-if>
+                  </sc-if>
+                </div>
+              </sc-if>
             </div>
             </sc-if>
 
@@ -454,6 +654,102 @@ docker run -d --label flightdeck.enable=true \
 </div>
 </sc-if>
 
+<sc-if value="{{ sigOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSignals }}" style="position:fixed;inset:0;background:var(--overlay);z-index:40;display:flex;justify-content:flex-end;font-family:'Geist','Instrument Sans',system-ui,sans-serif">
+  <aside onClick="{{ stop }}" role="dialog" aria-label="Signals" data-screen-label="Signals drawer" style="height:100%;background:var(--bg1);border-left:1px solid var(--line);box-shadow:var(--pop);display:flex;flex-direction:column;animation:fdSlide .22s ease-out;color:var(--text);font-size:14px;width:min(440px,100%)">
+    <div style="flex:none;display:flex;align-items:center;gap:10px;padding:18px 14px 12px 20px"><span style="font-size:17px;font-weight:600">Signals</span><span style="font-size:13px;color:var(--text3);flex:1">{{ unreadLine }}</span><button onClick="{{ closeSignals }}" title="Close (Esc)" aria-label="Close" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-x"></i></button></div>
+    <div style="flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 14px 12px 20px;border-bottom:1px solid var(--line)"><select value="{{ df.sev }}" onChange="{{ dfOn.sev }}" aria-label="Severity" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any severity</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="success">Success</option><option value="info">Info</option></select><select value="{{ df.type }}" onChange="{{ dfOn.type }}" aria-label="Event type" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any type</option><option value="service">Services</option><option value="deploy">Deploys</option><option value="agent">Agents</option><option value="security">Env, tokens, sign-in</option><option value="alert">External alerts</option></select><span style="flex:1"></span><button onClick="{{ readAll }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="border-color:var(--line3)"><i class="ph ph-checks"></i><span>Mark all read</span></button></div>
+    <sc-if value="{{ isMuted }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 20px;background:var(--abg);font-size:13px"><i class="ph ph-bell-slash" style="color:var(--ai)"></i><span>Muted {{ muteTxt }}. Signals are still recorded here.</span></div></sc-if>
+    <div style="flex:1;min-height:0;overflow:auto;padding:4px 0 16px">
+      <sc-for list="{{ drawerGroups }}" as="g" hint-placeholder-count="2">
+        <div style="font-size:12.5px;font-weight:500;color:var(--text3);padding:14px 20px 6px">{{ g.label }}</div>
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:12px;padding:10px 10px 10px 20px;border-bottom:1px solid var(--row);margin-bottom:-1px">
+  <span title="{{ r.sevLabel }}" style="width:8px;height:8px;border-radius:50%;background:{{ r.sevColor }};flex:none"></span>
+  <i class="ph {{ r.icon }}" style="font-size:18px;color:var(--text2);flex:none"></i>
+  <div style="flex:1;min-width:0"><div style="font-weight:{{ r.fw }};color:{{ r.fg }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</div><div style="font-size:12.5px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.ctx }}</div></div>
+  <span style="flex:none;font-size:12.5px;color:var(--text3);white-space:nowrap;font-variant-numeric:tabular-nums">{{ r.when }}</span>
+  <sc-if value="{{ r.unread }}" hint-placeholder-val="{{ true }}"><button onClick="{{ r.markRead }}" title="Mark read" aria-label="Mark read" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-check"></i></button></sc-if>
+  <button onClick="{{ r.open }}" title="Open what this is about" aria-label="Open" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-arrow-right"></i></button>
+</div></sc-for>
+      </sc-for>
+      <sc-if value="{{ drawerEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:56px 24px;text-align:center"><i class="ph ph-moon-stars" style="font-size:28px;color:var(--text3)"></i><div style="font-size:15px;font-weight:600;margin-top:8px">All quiet</div><div style="color:var(--text2);margin-top:4px">Nothing to show here.</div></div></sc-if>
+    </div>
+    <div style="flex:none;padding:12px 20px;border-top:1px solid var(--line)"><button onClick="{{ viewAllSignals }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;width:100%;justify-content:center;padding:8px 11px" style-hover="border-color:var(--line3)">View all signals</button></div>
+  </aside>
+</div>
+</sc-if>
+
+<sc-if value="{{ chOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeForms }}" style="position:fixed;inset:0;background:var(--overlay);z-index:40;display:flex;justify-content:flex-end;font-family:'Geist','Instrument Sans',system-ui,sans-serif">
+  <aside onClick="{{ stop }}" role="dialog" aria-label="Channel" data-screen-label="Channel form" style="height:100%;background:var(--bg1);border-left:1px solid var(--line);box-shadow:var(--pop);display:flex;flex-direction:column;animation:fdSlide .22s ease-out;color:var(--text);font-size:14px;width:min(480px,100%)">
+    <div style="flex:none;display:flex;align-items:center;gap:10px;padding:18px 14px 14px 24px;border-bottom:1px solid var(--line)"><span style="font-size:17px;font-weight:600;flex:1">{{ chTitle }}</span><button onClick="{{ closeForms }}" title="Close (Esc)" aria-label="Close" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-x"></i></button></div>
+    <div style="flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:16px">
+      <div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Type</span><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px"><sc-for list="{{ chTypes }}" as="t" hint-placeholder-count="6"><button onClick="{{ t.go }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:6px;background:{{ t.bg }};border:1px solid {{ t.line }};color:{{ t.fg }};border-radius:8px;padding:10px;font-size:12.5px;font-weight:500;cursor:pointer;text-align:left"><i class="ph {{ t.icon }}" style="font-size:18px"></i><span>{{ t.label }}</span></button></sc-for></div></div>
+      <label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Name</span><input value="{{ cf.name.v }}" onChange="{{ cf.name.on }}" placeholder="ops-telegram" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label>
+      <sc-if value="{{ cft.telegram }}" hint-placeholder-val="{{ true }}"><div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Bot token</span><div style="display:flex;gap:6px"><input type="{{ cf.botToken.type }}" aria-label="Bot token" value="{{ cf.botToken.v }}" onChange="{{ cf.botToken.on }}" placeholder="123456:ABC…" autocomplete="off" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><button onClick="{{ cf.botToken.toggle }}" title="Reveal or hide (reveals are audited)" aria-label="Reveal or hide Bot token" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;width:38px;height:auto;border:1px solid var(--line2)" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ cf.botToken.eye }}"></i></button></div></div><label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Chat ID</span><input value="{{ cf.chatId.v }}" onChange="{{ cf.chatId.on }}" placeholder="-1001234567890" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"></label></sc-if>
+      <sc-if value="{{ cft.email }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:none;display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:10px"><label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">SMTP host</span><input value="{{ cf.host.v }}" onChange="{{ cf.host.on }}" placeholder="smtp.example.com" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label><label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Port</span><input value="{{ cf.port.v }}" onChange="{{ cf.port.on }}" placeholder="587" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label></div>
+        <label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Username</span><input value="{{ cf.user.v }}" onChange="{{ cf.user.on }}" placeholder="alerts@example.com" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label><div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Password</span><div style="display:flex;gap:6px"><input type="{{ cf.pass.type }}" aria-label="Password" value="{{ cf.pass.v }}" onChange="{{ cf.pass.on }}" placeholder="SMTP password" autocomplete="off" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><button onClick="{{ cf.pass.toggle }}" title="Reveal or hide (reveals are audited)" aria-label="Reveal or hide Password" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;width:38px;height:auto;border:1px solid var(--line2)" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ cf.pass.eye }}"></i></button></div></div><label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">From</span><input value="{{ cf.from.v }}" onChange="{{ cf.from.on }}" placeholder="flightdeck@example.com" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label><label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">To (comma separated)</span><input value="{{ cf.to.v }}" onChange="{{ cf.to.on }}" placeholder="oncall@example.com, sre@example.com" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label>
+        <div style="flex:none;display:flex;align-items:center;gap:10px"><span style="flex:1">Require TLS</span><button role="switch" aria-checked="{{ cfTls.on }}" aria-label="Require TLS" onClick="{{ toggleTls }}" style="width:34px;height:20px;border-radius:10px;border:0;padding:2px;background:{{ cfTls.bg }};display:flex;justify-content:{{ cfTls.j }};flex:none;cursor:pointer"><span style="width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)"></span></button></div>
+      </sc-if>
+      <sc-if value="{{ cft.hook }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Webhook URL</span><div style="display:flex;gap:6px"><input type="{{ cf.hookUrl.type }}" aria-label="Webhook URL" value="{{ cf.hookUrl.v }}" onChange="{{ cf.hookUrl.on }}" placeholder="https://…" autocomplete="off" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><button onClick="{{ cf.hookUrl.toggle }}" title="Reveal or hide (reveals are audited)" aria-label="Reveal or hide Webhook URL" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;width:38px;height:auto;border:1px solid var(--line2)" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ cf.hookUrl.eye }}"></i></button></div></div></sc-if>
+      <sc-if value="{{ cft.webhook }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:none;display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:10px"><div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">URL</span><div style="display:flex;gap:6px"><input type="{{ cf.url.type }}" aria-label="URL" value="{{ cf.url.v }}" onChange="{{ cf.url.on }}" placeholder="https://example.com/hooks/flightdeck" autocomplete="off" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><button onClick="{{ cf.url.toggle }}" title="Reveal or hide (reveals are audited)" aria-label="Reveal or hide URL" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;width:38px;height:auto;border:1px solid var(--line2)" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ cf.url.eye }}"></i></button></div></div><label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Method</span><select value="{{ cf.method.v }}" onChange="{{ cf.method.on }}" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%;padding:9px 8px"><option value="POST">POST</option><option value="PUT">PUT</option></select></label></div>
+        <div style="flex:none;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:500;color:var(--text2);flex:1">Custom headers</span><button onClick="{{ toggleHeaders }}" title="Reveal or hide header values" aria-label="Reveal or hide header values" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ hdrEye }}"></i></button></div>
+          <sc-for list="{{ cfHeaders }}" as="x" hint-placeholder-count="1"><div style="display:flex;gap:6px"><input value="{{ x.k }}" onChange="{{ x.onK }}" placeholder="Header" aria-label="Header name" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;width:auto;flex:1 1 40%;min-width:0;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><input type="{{ x.type }}" value="{{ x.v }}" onChange="{{ x.onV }}" placeholder="Value" aria-label="Header value" autocomplete="off" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;width:auto;flex:1 1 60%;min-width:0;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><button onClick="{{ x.del }}" aria-label="Remove header" title="Remove header" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;height:auto" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-x"></i></button></div></sc-for>
+          <button onClick="{{ addHeader }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;align-self:flex-start" style-hover="border-color:var(--line3)"><i class="ph ph-plus"></i><span>Add header</span></button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ cft.custom }}" hint-placeholder-val="{{ false }}"><label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Endpoint URL</span><input value="{{ cf.endpoint.v }}" onChange="{{ cf.endpoint.on }}" placeholder="https://bridge.example.com/flightdeck" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"></label><div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Auth header</span><div style="display:flex;gap:6px"><input type="{{ cf.auth.type }}" aria-label="Auth header" value="{{ cf.auth.v }}" onChange="{{ cf.auth.on }}" placeholder="Bearer …" autocomplete="off" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;font:12.5px 'JetBrains Mono',monospace" style-focus="border-color:var(--ai)"><button onClick="{{ cf.auth.toggle }}" title="Reveal or hide (reveals are audited)" aria-label="Reveal or hide Auth header" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none;width:38px;height:auto;border:1px solid var(--line2)" style-hover="background:var(--bg3);color:var(--text)"><i class="ph {{ cf.auth.eye }}"></i></button></div></div>
+        <div style="flex:none;font-size:13px;color:var(--text2);line-height:1.5">A generic connector. It receives the standard event JSON below, so any outside system can subscribe: a mail relay, PagerDuty, Discord, a home-grown bridge.</div>
+      </sc-if>
+      <sc-if value="{{ cft.payload }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Payload sent for every event</span><pre style="margin:0;background:var(--bgc);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font:12px/1.7 'JetBrains Mono',monospace;color:var(--code);overflow:auto">{{ payload }}</pre></div></sc-if>
+      <sc-if value="{{ chHasErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="flex:none;font-size:13px;color:var(--red)">{{ chErr }}</div></sc-if>
+    </div>
+    <div style="flex:none;display:flex;justify-content:flex-end;gap:8px;padding:12px 24px;border-top:1px solid var(--line)"><button onClick="{{ closeForms }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:8px 13px" style-hover="border-color:var(--line3)">Cancel</button><button onClick="{{ saveChannel }}" style="display:flex;align-items:center;gap:8px;background:var(--accent);color:#14100a;border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:var(--accent-h)">{{ chSave }}</button></div>
+  </aside>
+</div>
+</sc-if>
+
+<sc-if value="{{ rfOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeForms }}" style="position:fixed;inset:0;background:var(--overlay);z-index:40;display:flex;justify-content:flex-end;font-family:'Geist','Instrument Sans',system-ui,sans-serif">
+  <aside onClick="{{ stop }}" role="dialog" aria-label="Route" data-screen-label="Route form" style="height:100%;background:var(--bg1);border-left:1px solid var(--line);box-shadow:var(--pop);display:flex;flex-direction:column;animation:fdSlide .22s ease-out;color:var(--text);font-size:14px;width:min(520px,100%)">
+    <div style="flex:none;display:flex;align-items:center;gap:10px;padding:18px 14px 14px 24px;border-bottom:1px solid var(--line)"><span style="font-size:17px;font-weight:600;flex:1">{{ rf.title }}</span><button onClick="{{ closeForms }}" title="Close (Esc)" aria-label="Close" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:none;border:0;border-radius:6px;color:var(--text2);font-size:16px;cursor:pointer;flex:none" style-hover="background:var(--bg3);color:var(--text)"><i class="ph ph-x"></i></button></div>
+    <div style="flex:1;min-height:0;overflow:auto;padding:20px 24px 28px;display:flex;flex-direction:column;gap:16px">
+      <label style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Name</span><input value="{{ rf.name }}" onChange="{{ rfOn.name }}" placeholder="Crashes and failed deploys" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none" style-focus="border-color:var(--ai)"></label>
+      <div style="flex:none;font-size:15px;font-weight:600;margin-top:6px">Match</div>
+      <div style="flex:none;display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:var(--text2)">Event types <span style="font-weight:400;color:var(--text3)">none selected means every event</span></span><div style="display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ rfTypes }}" as="t" hint-placeholder-count="14"><button onClick="{{ t.go }}" aria-pressed="{{ t.on }}" style="background:{{ t.bg }};border:1px solid {{ t.line }};color:{{ t.fg }};border-radius:20px;padding:4px 11px;font-size:12.5px;cursor:pointer">{{ t.label }}</button></sc-for></div></div>
+      <div style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:13px;font-weight:500;color:var(--text2);flex:1 1 140px">Minimum severity</span><div style="display:flex;gap:2px;background:var(--segtrack);border-radius:8px;padding:2px"><sc-for list="{{ rfSev }}" as="v" hint-placeholder-count="3"><button onClick="{{ v.go }}" style="background:{{ v.bg }};color:{{ v.color }};box-shadow:{{ v.sh }};border:0;border-radius:6px;padding:5px 11px;font-size:13px;font-weight:500;cursor:pointer">{{ v.label }}</button></sc-for></div></div>
+      <div style="flex:none;display:flex;gap:8px;flex-wrap:wrap"><select value="{{ rf.project }}" onChange="{{ rfOn.project }}" aria-label="Project" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any project</option><option value="storefront">storefront</option><option value="telemetry">telemetry</option><option value="internal">internal</option></select><select value="{{ rf.host }}" onChange="{{ rfOn.host }}" aria-label="Host" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="all">Any host</option><option value="atlas">atlas</option><option value="vega">vega</option><option value="orion">orion</option></select><input value="{{ rf.service }}" onChange="{{ rfOn.service }}" placeholder="Any service" aria-label="Service" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;width:auto;flex:1 1 120px;padding:6px 10px;font-size:13px" style-focus="border-color:var(--ai)"></div>
+      <div style="flex:none;font-size:15px;font-weight:600;margin-top:6px">Send to</div>
+      <div style="flex:none;display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ rfChans }}" as="t" hint-placeholder-count="4"><button onClick="{{ t.go }}" aria-pressed="{{ t.on }}" style="display:flex;align-items:center;gap:6px;background:{{ t.bg }};border:1px solid {{ t.line }};color:{{ t.fg }};border-radius:20px;padding:4px 11px 4px 9px;font-size:12.5px;cursor:pointer"><i class="ph {{ t.icon }}" style="font-size:14px"></i><span>{{ t.name }}</span></button></sc-for><sc-if value="{{ noChannels }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--text2)">No channels yet. Add one on the Channels tab first.</span></sc-if></div>
+      <div style="flex:none;font-size:15px;font-weight:600;margin-top:6px">Options</div>
+      <div style="flex:none;display:flex;align-items:center;gap:10px"><span style="flex:1">Throttle repeats <span style="color:var(--text3)">one delivery per identical event in the window</span></span><select value="{{ rf.throttle }}" onChange="{{ rfOn.throttle }}" aria-label="Throttle window" style="background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 8px;font-size:13px;cursor:pointer;max-width:100%"><option value="0">Off</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="60">1 hour</option></select></div>
+      <div style="flex:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1 1 120px">Quiet hours</span><input value="{{ rf.qFrom }}" onChange="{{ rfOn.qFrom }}" aria-label="Quiet from" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;width:72px;padding:6px 8px;font-size:13px;text-align:center;opacity:{{ rf.qOp }}" style-focus="border-color:var(--ai)"><span style="color:var(--text3)">to</span><input value="{{ rf.qTo }}" onChange="{{ rfOn.qTo }}" aria-label="Quiet until" style="width:100%;background:var(--bg1);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13.5px;outline:none;width:72px;padding:6px 8px;font-size:13px;text-align:center;opacity:{{ rf.qOp }}" style-focus="border-color:var(--ai)"><button role="switch" aria-checked="{{ rf.quiet }}" aria-label="Quiet hours" onClick="{{ rfOn.quiet }}" style="width:34px;height:20px;border-radius:10px;border:0;padding:2px;background:{{ rf.qBg }};display:flex;justify-content:{{ rf.qJ }};flex:none;cursor:pointer"><span style="width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)"></span></button></div>
+      <div style="flex:none;display:flex;align-items:center;gap:10px"><span style="flex:1">Only on change <span style="color:var(--text3)">skip events that repeat the last state</span></span><button role="switch" aria-checked="{{ rf.onChange }}" aria-label="Only on change" onClick="{{ rfOn.onChange }}" style="width:34px;height:20px;border-radius:10px;border:0;padding:2px;background:{{ rf.cBg }};display:flex;justify-content:{{ rf.cJ }};flex:none;cursor:pointer"><span style="width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)"></span></button></div>
+      <div style="flex:none;display:flex;flex-direction:column;gap:8px;background:var(--bgc);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:6px">
+        <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-flask" style="font-size:16px;color:var(--text2)"></i><span style="font-weight:600;flex:1">Test against recent signals</span></div>
+        <div style="font-size:13px;color:var(--text2)">{{ rfTestTxt }}</div>
+        <sc-for list="{{ rfTest }}" as="r" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:10px;font-size:13px"><span style="width:7px;height:7px;border-radius:50%;background:{{ r.sevColor }};flex:none"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</span><span style="flex:none;font-size:12.5px;color:var(--text3)">{{ r.when }}</span></div></sc-for>
+      </div>
+      <sc-if value="{{ rf.hasErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="flex:none;font-size:13px;color:var(--red)">{{ rf.err }}</div></sc-if>
+    </div>
+    <div style="flex:none;display:flex;justify-content:flex-end;gap:8px;padding:12px 24px;border-top:1px solid var(--line)"><button onClick="{{ closeForms }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:8px 13px" style-hover="border-color:var(--line3)">Cancel</button><button onClick="{{ saveRoute }}" style="display:flex;align-items:center;gap:8px;background:var(--accent);color:#14100a;border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap" style-hover="background:var(--accent-h)">{{ rf.save }}</button></div>
+  </aside>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasConfirm }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ cancelConfirm }}" style="position:fixed;inset:0;background:var(--overlay);z-index:70;display:flex;align-items:center;justify-content:center;padding:16px;font-family:'Geist','Instrument Sans',system-ui,sans-serif">
+  <div onClick="{{ stop }}" role="alertdialog" aria-modal="true" aria-label="{{ cfm.title }}" style="width:min(440px,100%);background:var(--bg2);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--pop);padding:20px;color:var(--text);font-size:14px;animation:fdUp .16s ease-out;display:flex;flex-direction:column;gap:10px">
+    <div style="font-size:16px;font-weight:600">{{ cfm.title }}</div>
+    <div style="font-size:13.5px;color:var(--text2);line-height:1.5">{{ cfm.body }}</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px"><button onClick="{{ cancelConfirm }}" style="display:flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:7px;padding:6px 11px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;padding:8px 13px" style-hover="border-color:var(--line3)">Cancel</button><button ref="{{ confirmRef }}" onClick="{{ doConfirm }}" style="border:0;border-radius:7px;padding:8px 13px;font-size:13.5px;font-weight:600;cursor:pointer;background:{{ cfm.bg }};color:{{ cfm.fg }}">{{ cfm.btn }}</button></div>
+  </div>
+</div>
+</sc-if>
+
 <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
 <div onClick="{{ closePalette }}" style="position:fixed;inset:0;background:var(--overlay);z-index:50;display:flex;justify-content:center;align-items:flex-start;padding:14vh 16px 0;font-family:'Geist','Instrument Sans',system-ui,sans-serif">
   <div onClick="{{ stop }}" style="width:min(540px,100%);background:var(--bg2);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--pop);overflow:hidden;animation:fdUp .16s ease-out;color:var(--text)">
@@ -469,7 +765,7 @@ docker run -d --label flightdeck.enable=true \
 <div style="position:fixed;right:20px;bottom:20px;z-index:60;background:var(--text);color:var(--bg1);border-radius:8px;padding:11px 16px;font:500 13.5px 'Geist','Instrument Sans',system-ui,sans-serif;box-shadow:var(--pop);animation:fdUp .18s ease-out;max-width:380px">{{ toast }}</div>
 </sc-if>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;rich&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;rich&quot;,&quot;tsType&quot;:&quot;'rich'|'compact'&quot;,&quot;section&quot;:&quot;Service cards&quot;},&quot;showLinks&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Service cards&quot;},&quot;detail&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;drawer&quot;,&quot;page&quot;],&quot;default&quot;:&quot;drawer&quot;,&quot;tsType&quot;:&quot;'drawer'|'page'&quot;,&quot;section&quot;:&quot;Service detail&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;project&quot;,&quot;signin&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;'overview'|'project'|'signin'&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;'light'|'dark'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;rich&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;rich&quot;,&quot;tsType&quot;:&quot;'rich'|'compact'&quot;,&quot;section&quot;:&quot;Service cards&quot;},&quot;showLinks&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Service cards&quot;},&quot;detail&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;drawer&quot;,&quot;page&quot;],&quot;default&quot;:&quot;drawer&quot;,&quot;tsType&quot;:&quot;'drawer'|'page'&quot;,&quot;section&quot;:&quot;Service detail&quot;},&quot;logHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Service detail&quot;},&quot;transmitterData&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;sample&quot;,&quot;empty&quot;,&quot;loading&quot;],&quot;default&quot;:&quot;sample&quot;,&quot;tsType&quot;:&quot;'sample'|'empty'|'loading'&quot;,&quot;section&quot;:&quot;Transmitter&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;project&quot;,&quot;signin&quot;],&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;'overview'|'project'|'signin'&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
 class Component extends DCLogic {
   seq = 0;
   hosts = [
@@ -528,6 +824,27 @@ class Component extends DCLogic {
   xlogRef = React.createRef();
   palRef = React.createRef();
 
+  ET = {
+    'service.exited': ['Service exited', 'ph-warning-octagon', 'critical'], 'service.restarting': ['Service restarting', 'ph-arrow-clockwise', 'warning'], 'service.recovered': ['Service recovered', 'ph-heartbeat', 'success'],
+    'deploy.in_progress': ['Deploy in progress', 'ph-circle-notch', 'info'], 'deploy.succeeded': ['Deploy succeeded', 'ph-rocket-launch', 'success'], 'deploy.failed': ['Deploy failed', 'ph-x-circle', 'critical'],
+    'agent.connected': ['Agent connected', 'ph-plugs-connected', 'success'], 'agent.disconnected': ['Agent disconnected', 'ph-plugs', 'warning'],
+    'env.changed': ['Env changed', 'ph-sliders-horizontal', 'info'], 'token.created': ['Token created', 'ph-key', 'info'], 'token.revoked': ['Token revoked', 'ph-key', 'warning'], 'auth.login': ['Sign-in', 'ph-sign-in', 'info'],
+    'alert.firing': ['External alert firing', 'ph-bell-ringing', 'critical'], 'alert.resolved': ['External alert resolved', 'ph-check-circle', 'success']
+  };
+  CT = { telegram: ['Telegram', 'ph-telegram-logo', 'botToken', 'Bot token'], email: ['Email (SMTP)', 'ph-envelope-simple', 'pass', 'Password'], discord: ['Discord', 'ph-discord-logo', 'hookUrl', 'Webhook URL'], slack: ['Slack', 'ph-slack-logo', 'hookUrl', 'Webhook URL'], webhook: ['Generic webhook', 'ph-webhooks-logo', 'url', 'URL'], custom: ['Custom connector', 'ph-puzzle-piece', 'auth', 'Auth header'] };
+  ciRuns = [
+    ['acme/storefront', 'storefront', 484, 'b90c2e1', 'feat(web): gift card redemption', 'feat/gift-cards', 'jonas', 'in_progress', ['web', 'api'], 2, 0, '1m 48s'],
+    ['acme/storefront', 'storefront', 483, '3fa81e0', 'fix(api): return 422 instead of 500 on validation errors', 'main', 'jonas', 'success', ['api'], 24, 22, '2m 10s'],
+    ['acme/storefront', 'storefront', 482, 'e1a1fac', 'fix(checkout): keep cart when the session refreshes', 'main', 'mira', 'success', ['web'], 43, 41, '1m 52s'],
+    ['acme/storefront', 'storefront', 481, '44d19aa', 'fix(cart): rounding on multi-currency totals', 'fix/cart-total', 'mira', 'cancelled', ['web'], 190, 190, '0m 12s'],
+    ['acme/storefront', 'storefront', 479, '7be20c4', 'feat(web): product image zoom', 'main', 'jonas', 'failure', ['web'], 1500, 1499, '0m 38s'],
+    ['acme/storefront', 'storefront', 477, 'a8830f1', 'feat(worker): batch receipt emails', 'main', 'jonas', 'success', ['worker'], 2900, 2898, '1m 31s'],
+    ['acme/telemetry', 'telemetry', 215, 'c41e7aa', 'chore(ingest): update dependencies', 'main', 'mira', 'pending', ['ingest'], 1, 1, '—'],
+    ['acme/telemetry', 'telemetry', 214, 'b72e09d', 'feat(ingest): drop series over cardinality budget', 'main', 'mira', 'success', ['ingest'], 2950, 2947, '3m 02s'],
+    ['acme/wiki', 'internal', 88, '5d0c11a', 'docs: on-call runbook for payment timeouts', 'main', 'jonas', 'success', ['wiki'], 8700, 8699, '0m 54s']
+  ].map(r => ({ repo: r[0], project: r[1], run: r[2], sha: r[3], msg: r[4], branch: r[5], actor: r[6], status: r[7], services: r[8], ago: r[9], upd: r[10], dur: r[11] }));
+  confirmRef = React.createRef();
+
   state = {
     screen: this.startScreen(),
     home: 'overview', stab: 'tokens', projectId: 'storefront', ptab: 'services', view: 'map', sel: null, dtab: 'deploys',
@@ -540,14 +857,8 @@ class Component extends DCLogic {
       { name: 'vega-agent', host: 'vega', fp: 'fd_a_17d0…c3a2', created: '2026-10-29', used: 'seconds ago' },
       { name: 'orion-agent', host: 'orion', fp: 'fd_a_e08b…7f15', created: '2026-11-02', used: '14m ago' }
     ],
-    audit: [
-      { t: '09:42:10', user: 'jonas@acme.dev', role: 'operator', action: 'env.reveal', target: 'api (DATABASE_URL)', result: 'ok' },
-      { t: '09:31:55', user: 'jonas@acme.dev', role: 'operator', action: 'service.restart', target: 'worker@vega', result: 'ok' },
-      { t: '09:30:02', user: 'lea@acme.dev', role: 'viewer', action: 'service.restart', target: 'worker@vega', result: 'denied' },
-      { t: '08:57:40', user: 'mira@acme.dev', role: 'admin', action: 'env.update', target: 'worker (CONCURRENCY)', result: 'ok' },
-      { t: '08:12:03', user: 'mira@acme.dev', role: 'admin', action: 'token.create', target: 'orion-agent', result: 'ok' },
-      { t: '07:48:19', user: 'mira@acme.dev', role: 'admin', action: 'auth.login', target: 'oidc', result: 'ok' }
-    ],
+    audit: this.auditSeed(),
+    ...this.seedTx((this.props || {}).transmitterData), tx: 'signals', txReady: false, sigDrawer: false, sf: { sev: 'all', type: 'all', project: 'all', host: 'all', range: 'all', q: '' }, df: { sev: 'all', type: 'all' }, af: { actor: 'all', action: 'all', result: 'all', range: 'all' }, depF: 'all', mute: null, muteMenu: false, chForm: null, routeForm: null, confirm: null, reveal: {}, logMode: 'live', hq: '', hrange: '6h', hRes: null, hLoading: false,
     palette: false, pq: '', projMenu: false, connect: false, toast: null, tick: 0, theme: (this.props || {}).theme === 'dark' ? 'dark' : 'light'
   };
 
@@ -613,22 +924,254 @@ class Component extends DCLogic {
 
   componentDidMount() {
     this.applyTheme();
+    if (this.props.transmitterData === 'empty' && this.state.signals.length) this.setState(this.seedTx('empty'));
     this._iv = setInterval(this.tick, 900);
     this._key = e => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (this.state.screen !== 'signin') this.setState(s => ({ palette: !s.palette, pq: '' })); }
-      else if (e.key === 'Escape') { if (this.state.palette) this.setState({ palette: false }); else if (this.state.projMenu) this.setState({ projMenu: false }); else if (this.state.sel) this.setState({ sel: null }); }
+      else if (e.key === 'Escape') { if (this.closeTop()) return; if (this.state.palette) this.setState({ palette: false }); else if (this.state.projMenu) this.setState({ projMenu: false }); else if (this.state.sel) this.setState({ sel: null }); }
     };
     window.addEventListener('keydown', this._key);
   }
   componentWillUnmount() { clearInterval(this._iv); clearTimeout(this._tt); window.removeEventListener('keydown', this._key); }
   componentDidUpdate(pp) {
     pp = pp || {};
+    if (pp.transmitterData !== this.props.transmitterData && (pp.transmitterData === 'empty' || this.props.transmitterData === 'empty')) this.setState(this.seedTx(this.props.transmitterData));
+    if (this.state.home === 'transmitter' && !this.state.txReady && !this._txT) this._txT = setTimeout(() => this.setState({ txReady: true }), 650);
+    if (this.state.confirm && !this._cf && this.confirmRef.current) this.confirmRef.current.focus();
+    this._cf = !!this.state.confirm;
     if (pp.startScreen !== this.props.startScreen) this.setState({ screen: this.startScreen() });
     if (pp.theme !== this.props.theme && this.props.theme) this.setState({ theme: this.props.theme });
     if (this._theme !== this.state.theme) { this._theme = this.state.theme; this.applyTheme(); }
     if (this.state.palette && !this._pal && this.palRef.current) this.palRef.current.focus();
     this._pal = this.state.palette;
     if (!this.state.paused) [this.logRef, this.xlogRef].forEach(r => { if (r.current) r.current.scrollTop = r.current.scrollHeight; });
+  }
+
+  rel(ts) { const m = Math.round((Date.now() - ts) / 60000); return m < 1 ? 'just now' : m < 60 ? m + 'm ago' : m < 1440 ? Math.floor(m / 60) + 'h ago' : m < 2880 ? 'yesterday' : Math.floor(m / 1440) + 'd ago'; }
+  rank(s) { return s === 'critical' ? 2 : s === 'warning' ? 1 : 0; }
+  grp(t) { const p = t.split('.')[0]; return ['service', 'deploy', 'agent', 'alert'].includes(p) ? p : 'security'; }
+  matches(r, g) { return (!r.types.length || r.types.includes(g.type)) && this.rank(g.sev) >= this.rank(r.minSev) && (r.project === 'all' || r.project === g.project) && (r.host === 'all' || r.host === g.host) && (!r.service || r.service === g.service); }
+  ask(title, body, btn, fn, danger) { this.setState({ confirm: { title, body, btn, fn, danger: !!danger } }); }
+  closeTop() { const S = this.state; if (S.confirm) this.setState({ confirm: null }); else if (S.chForm || S.routeForm) this.setState({ chForm: null, routeForm: null }); else if (S.sigDrawer) this.setState({ sigDrawer: false }); else if (S.muteMenu) this.setState({ muteMenu: false }); else return false; return true; }
+  signal(type, title, c, sev) {
+    c = c || {};
+    const g = { id: ++this.seq, ts: Date.now(), type, sev: sev || this.ET[type][2], title, project: c.project || null, service: c.kind ? c.id : null, host: c.host || null, read: false, src: null };
+    this.setState(s => {
+      const hit = s.mute ? [] : s.routes.filter(r => !r.muted && this.matches(r, g)).flatMap(r => r.channels);
+      return { signals: [g, ...s.signals], channels: s.channels.map(ch => hit.includes(ch.id) && ch.enabled ? { ...ch, last: ch.broken ? { state: 'failed', at: g.ts, err: ch.broken } : { state: 'ok', at: g.ts } } : ch) };
+    });
+  }
+  openSignal(g) {
+    this.setState(s => ({ sigDrawer: false, signals: s.signals.map(x => x.id === g.id ? { ...x, read: true } : x) }));
+    const t = g.type.split('.')[0];
+    if (g.service && this.svc(g.service)) this.openService(g.service, t === 'service' || t === 'alert' ? 'logs' : t === 'env' ? 'vars' : 'deploys');
+    else if (t === 'token') this.setState({ screen: 'home', home: 'settings', stab: 'tokens' });
+    else if (t === 'auth') this.setState({ screen: 'home', home: 'activity' });
+    else this.setState({ screen: 'home', home: 'hosts' });
+  }
+  testChannel(c) {
+    const set = p => this.setState(s => ({ channels: s.channels.map(x => x.id === c.id ? { ...x, ...p } : x) }));
+    set({ testing: true }); this.audit('channel.test', c.name, c.broken ? 'failed' : 'ok');
+    setTimeout(() => { const at = Date.now(); if (c.broken) { set({ testing: false, last: { state: 'failed', at, err: c.broken } }); this.toast('Test failed: ' + c.name + ' answered ' + c.broken.split('.')[0]); } else { set({ testing: false, last: { state: 'ok', at } }); this.toast('Test sent ✓ ' + c.name); } }, 1300);
+  }
+  runHistory() {
+    const id = this.state.sel, s = this.svc(id); if (!s || (this.props.logHistory ?? true) === false) return;
+    const range = this.state.hrange, span = { '1h': 3600e3, '6h': 216e5, '24h': 864e5, '7d': 6048e5 }[range], q = this.state.hq.trim().toLowerCase(), now = Date.now();
+    this.setState({ hLoading: true });
+    clearTimeout(this._ht); this._ht = setTimeout(() => {
+      const rows = []; for (let i = 0; i < 360; i++) { const l = this.genLine(s); rows.push({ ts: now - 60000 - Math.random() * span, lvl: l[0], msg: l[1] }); }
+      this.setState({ hLoading: false, hRes: { svc: id, q, range, rows: rows.filter(r => !q || r.msg.toLowerCase().includes(q)).sort((a, b) => b.ts - a.ts).slice(0, 120) } });
+    }, 650);
+  }
+  auditSeed() {
+    const now = Date.now(), a = (ago, user, role, action, target, result) => { const ts = now - ago * 60000; return { ts, t: this.fmtT(ts), user: user + '@acme.dev', role, action, target, result: result || 'ok' }; };
+    return [
+      a(4, 'jonas', 'operator', 'env.reveal', 'api (DATABASE_URL)'), a(15, 'jonas', 'operator', 'service.restart', 'worker@vega'), a(17, 'lea', 'viewer', 'service.restart', 'worker@vega', 'denied'),
+      a(50, 'mira', 'admin', 'env.update', 'worker (CONCURRENCY)'), a(95, 'mira', 'admin', 'token.create', 'orion-agent'), a(120, 'mira', 'admin', 'auth.login', 'oidc'),
+      a(300, 'jonas', 'operator', 'service.redeploy', 'web@atlas → e1a1fac'), a(1490, 'jonas', 'operator', 'service.redeploy', 'web@atlas → 7be20c4', 'failed'), a(1520, 'lea', 'viewer', 'auth.login', 'oidc'),
+      a(2900, 'mira', 'admin', 'token.revoke', 'old-atlas-agent'), a(4400, 'mira', 'admin', 'channel.update', 'ops-telegram'), a(4410, 'mira', 'admin', 'route.create', 'Crashes and failed deploys')
+    ];
+  }
+  seedTx(mode) {
+    if (mode === 'empty') return { signals: [], channels: [], routes: [], sources: [] };
+    const now = Date.now(), m = 60000;
+    const g = (ago, type, title, project, service, host, read, sev, src) => ({ id: ++this.seq, ts: now - ago * m, type, sev: sev || this.ET[type][2], title, project, service, host, read: !!read, src: src || null });
+    const R = (id, name, types, minSev, channels, o) => ({ id, name, types, minSev, project: 'all', host: 'all', service: '', channels, throttle: 0, quiet: false, qFrom: '22:00', qTo: '07:00', onChange: false, muted: false, ...o });
+    const gone = '404 Unknown Webhook. The webhook was deleted on the Discord side.';
+    return {
+      signals: [
+        g(3, 'alert.firing', 'HighErrorRate: api 5xx above 2% for 5m', 'storefront', 'api', 'atlas', 0, 'critical', 'Grafana'),
+        g(6, 'service.exited', 'worker exited with code 137 (OOMKilled)', 'storefront', 'worker', 'vega'),
+        g(9, 'service.restarting', 'worker restarting, third restart today', 'storefront', 'worker', 'vega'),
+        g(14, 'agent.disconnected', 'Agent on orion disconnected', null, null, 'orion'),
+        g(22, 'deploy.succeeded', 'CI finished 3fa81e0 for api, container not recreated yet', 'storefront', 'api', 'atlas', 0, 'warning'),
+        g(24, 'deploy.in_progress', 'Deploy 3fa81e0 for api started', 'storefront', 'api', 'atlas', 1),
+        g(31, 'alert.resolved', 'DiskAlmostFull resolved on vega', null, null, 'vega', 1, null, 'flightdeck-watcher'),
+        g(41, 'deploy.succeeded', 'web is live on e1a1fac', 'storefront', 'web', 'atlas', 1),
+        g(50, 'env.changed', 'worker recreated after CONCURRENCY changed', 'storefront', 'worker', 'vega', 1),
+        g(95, 'token.created', 'Agent token orion-agent created', null, null, 'orion', 1),
+        g(120, 'auth.login', 'mira@acme.dev signed in via SSO', null, null, null, 1),
+        g(180, 'agent.connected', 'Agent on vega connected', null, null, 'vega', 1),
+        g(1490, 'deploy.failed', 'Deploy 7be20c4 for web failed in CI', 'storefront', 'web', 'atlas', 1),
+        g(1600, 'service.recovered', 'ingest recovered after restart', 'telemetry', 'ingest', 'vega', 1),
+        g(2900, 'token.revoked', 'Agent token old-atlas-agent revoked', null, null, 'atlas', 1),
+        g(3100, 'alert.firing', 'DiskAlmostFull: /var at 91% on vega', null, null, 'vega', 1, 'warning', 'flightdeck-watcher')
+      ],
+      channels: [
+        { id: 'c1', type: 'telegram', name: 'ops-telegram', enabled: true, last: { state: 'ok', at: now - 3 * m }, cfg: { botToken: '7400000000:AAH-demo-token-not-real', chatId: '-1001234567890' } },
+        { id: 'c2', type: 'email', name: 'oncall-email', enabled: true, last: { state: 'ok', at: now - 14 * m }, cfg: { host: 'smtp.acme.dev', port: '587', user: 'alerts@acme.dev', pass: 'demo-smtp-password', from: 'flightdeck@acme.dev', to: 'oncall@acme.dev, sre@acme.dev' }, tls: true },
+        { id: 'c3', type: 'discord', name: 'team-discord', enabled: true, broken: gone, last: { state: 'failed', at: now - 22 * m, err: gone }, cfg: { hookUrl: 'https://discord.example/api/webhooks/0000/demo-not-real' } },
+        { id: 'c4', type: 'custom', name: 'pager-bridge', enabled: true, last: { state: 'retrying', at: now - 6 * m, err: '503 from bridge.acme.dev. Attempt 2 of 5, next try in 30s.' }, cfg: { endpoint: 'https://bridge.acme.dev/flightdeck', auth: 'Bearer demo-bridge-key' } },
+        { id: 'c5', type: 'webhook', name: 'audit-archive', enabled: false, last: { state: 'never' }, cfg: { url: 'https://archive.acme.dev/hooks/flightdeck', method: 'POST' }, headers: [{ k: 'X-Signature', v: 'demo-hmac-key' }] }
+      ],
+      routes: [
+        R('r1', 'Crashes and failed deploys', ['service.exited', 'deploy.failed'], 'critical', ['c1', 'c4'], { throttle: 10, onChange: true }),
+        R('r2', 'Storefront deploys', ['deploy.in_progress', 'deploy.succeeded', 'deploy.failed'], 'info', ['c3'], { project: 'storefront' }),
+        R('r3', 'Agents and security', ['agent.disconnected', 'token.created', 'token.revoked', 'env.changed'], 'info', ['c2'], { quiet: true }),
+        R('r4', 'External alerts', ['alert.firing'], 'warning', ['c1', 'c2'], { throttle: 5, muted: true })
+      ],
+      sources: [
+        { id: 's1', name: 'grafana-alerts', kind: 'Grafana', slug: 'grafana-7c1e', token: 'fd_in_demo_4b9d2c7e81aa', last: now - 3 * m },
+        { id: 's2', name: 'flightdeck-watcher', kind: 'flightdeck-watcher', slug: 'watcher-02fa', token: 'fd_in_demo_e17a55c0393f', last: now - 31 * m }
+      ]
+    };
+  }
+  extraVals() {
+    const S = this.state, isAdmin = S.role === 'admin', canOp = S.role !== 'viewer', now = Date.now(), isHome = S.screen === 'home';
+    const SC = { info: 'var(--blue)', success: 'var(--green)', warning: 'var(--accent)', critical: 'var(--red)' };
+    const cap = s => s[0].toUpperCase() + s.slice(1);
+    const seg = on => ({ bg: on ? 'var(--seg)' : 'transparent', color: on ? 'var(--text)' : 'var(--text2)', sh: on ? 'var(--segsh)' : 'none' });
+    const chip = on => ({ on, bg: on ? 'var(--abg)' : 'var(--bg2)', line: on ? 'var(--ai)' : 'var(--line2)', fg: on ? 'var(--text)' : 'var(--text2)' });
+    const swBg = on => on ? 'var(--green)' : 'var(--line3)', swJ = on => on ? 'flex-end' : 'flex-start';
+    const tab = on => ({ line: on ? 'var(--text)' : 'transparent', color: on ? 'var(--text)' : 'var(--text2)' });
+    const span = { '1h': 3600e3, '6h': 216e5, '24h': 864e5, '7d': 6048e5 }, spanTxt = { '1h': 'last hour', '6h': 'last 6 hours', '24h': 'last 24 hours', '7d': 'last 7 days' };
+    const inRange = (ts, r) => !span[r] || now - ts <= span[r];
+    const ons = (k, keys) => Object.fromEntries(keys.map(key => [key, e => { const v = e.target.value; this.setState(s => ({ [k]: { ...s[k], [key]: v } })); }]));
+    const copy = (txt, msg) => () => { try { navigator.clipboard.writeText(txt); } catch (e) {} this.toast(msg); };
+    const today = new Date().toDateString();
+    const row = g => { const e = this.ET[g.type]; return { sevColor: SC[g.sev], sevLabel: cap(g.sev), icon: e[1], title: g.title, ctx: [e[0], g.project, g.service, g.host, g.src && 'via ' + g.src].filter(Boolean).join(' · '), when: this.rel(g.ts), unread: !g.read, fw: g.read ? 400 : 600, fg: g.read ? 'var(--text2)' : 'var(--text)', markRead: () => this.setState(s => ({ signals: s.signals.map(x => x.id === g.id ? { ...x, read: true } : x) })), open: () => this.openSignal(g) }; };
+    const group = list => [['Today', list.filter(g => new Date(g.ts).toDateString() === today)], ['Earlier', list.filter(g => new Date(g.ts).toDateString() !== today)]].filter(x => x[1].length).map(x => ({ label: x[0], rows: x[1].map(row) }));
+    const filt = (f, q) => S.signals.filter(g => (f.sev === 'all' || g.sev === f.sev) && (f.type === 'all' || this.grp(g.type) === f.type) && (!f.project || f.project === 'all' || g.project === f.project) && (!f.host || f.host === 'all' || g.host === f.host) && inRange(g.ts, f.range) && (!q || (g.title + ' ' + (g.service || '') + ' ' + (g.host || '')).toLowerCase().includes(q)));
+    const unread = S.signals.filter(g => !g.read).length;
+    const loading = isHome && S.home === 'transmitter' && (this.props.transmitterData === 'loading' || !S.txReady);
+    const pageList = filt(S.sf, S.sf.q.trim().toLowerCase()), drawerList = filt(S.df).slice(0, 40);
+    const hhmm = ts => this.fmtT(ts).slice(0, 5);
+    const muteFor = (label, ms) => () => { this.setState({ muteMenu: false }); const until = Date.now() + ms; this.ask('Mute all notifications ' + label + '?', 'No channel receives a delivery until ' + hhmm(until) + '. Signals are still recorded in the inbox, and every route resumes by itself afterwards.', 'Mute all', () => { this.setState({ mute: { until } }); this.audit('notify.mute', 'all channels, ' + label); this.toast('Notifications muted until ' + hhmm(until)); }); };
+    const unmute = () => { this.setState({ mute: null, muteMenu: false }); this.audit('notify.unmute', 'all channels'); this.toast('Notifications resumed'); };
+
+    const channelCards = S.channels.map(c => {
+      const t = this.CT[c.type], l = c.last || { state: 'never' }, key = 'ch:' + c.id, shown = !!S.reveal[key] && isAdmin, secret = (c.cfg || {})[t[2]] || '';
+      const st = c.testing ? ['var(--ai)', 'Sending test…', 'Waiting for the destination to answer.'] : !c.enabled ? ['var(--text3)', 'Disabled', 'Routes skip this channel until it is enabled.'] : l.state === 'ok' ? ['var(--green)', 'Delivered ' + this.rel(l.at), 'Last delivery succeeded.'] : l.state === 'failed' ? ['var(--red)', 'Failed ' + this.rel(l.at), l.err] : l.state === 'retrying' ? ['var(--ai)', 'Retrying', l.err] : ['var(--text3)', 'No deliveries yet', 'Send a test to check the connection.'];
+      const used = S.routes.filter(r => r.channels.includes(c.id)).length;
+      return { name: c.name, icon: t[1], typeLabel: t[0], enabled: c.enabled, swBg: swBg(c.enabled), swJ: swJ(c.enabled), stColor: st[0], stTitle: st[1], stDetail: st[2], secKey: t[3], secVal: shown ? secret : '••••••••••••', secFg: shown ? 'var(--text)' : 'var(--text3)', eye: shown ? 'ph-eye-slash' : 'ph-eye',
+        reveal: () => { if (!shown) this.audit('secret.reveal', c.name + ' (' + t[3] + ')'); this.setState(s => ({ reveal: { ...s.reveal, [key]: !shown } })); },
+        toggle: () => { this.setState(s => ({ channels: s.channels.map(x => x.id === c.id ? { ...x, enabled: !x.enabled } : x) })); this.audit(c.enabled ? 'channel.disable' : 'channel.enable', c.name); this.toast(c.name + (c.enabled ? ' disabled' : ' enabled')); },
+        test: () => this.ask('Send a test to ' + c.name + '?', 'One sample "Test signal" message is delivered to this ' + t[0] + ' destination right now. Nothing else is sent.', 'Send test', () => this.testChannel(c)),
+        edit: () => this.setState({ chForm: { id: c.id, type: c.type, name: c.name, cfg: { ...c.cfg }, headers: (c.headers || []).map(x => ({ ...x })), tls: c.tls !== false, show: {}, err: '' } }),
+        del: () => this.ask('Delete channel ' + c.name + '?', (used ? used + (used > 1 ? ' routes send' : ' route sends') + ' to it and will stop delivering there. ' : 'No route uses it. ') + 'Its stored secret is erased. This cannot be undone.', 'Delete channel', () => { this.setState(s => ({ channels: s.channels.filter(x => x.id !== c.id), routes: s.routes.map(r => ({ ...r, channels: r.channels.filter(x => x !== c.id) })) })); this.audit('channel.delete', c.name); this.toast(c.name + ' deleted'); }, true) };
+    });
+
+    const F = S.chForm, keys = ['name', 'botToken', 'chatId', 'host', 'port', 'user', 'pass', 'from', 'to', 'hookUrl', 'url', 'method', 'endpoint', 'auth'], secretKeys = ['botToken', 'pass', 'hookUrl', 'url', 'auth'], cf = {};
+    keys.forEach(k => { const shown = !!(F && F.show[k]); cf[k] = { v: F ? (k === 'name' ? F.name : F.cfg[k] || '') : '', type: secretKeys.includes(k) && !shown ? 'password' : 'text', eye: shown ? 'ph-eye-slash' : 'ph-eye',
+      on: e => { const v = e.target.value; this.setState(s => ({ chForm: k === 'name' ? { ...s.chForm, name: v, err: '' } : { ...s.chForm, cfg: { ...s.chForm.cfg, [k]: v }, err: '' } })); },
+      toggle: () => { if (!shown && F.id) this.audit('secret.reveal', F.name + ' (' + k + ')'); this.setState(s => ({ chForm: { ...s.chForm, show: { ...s.chForm.show, [k]: !shown } } })); } }; });
+    const setH = (i, p) => this.setState(s => ({ chForm: { ...s.chForm, headers: s.chForm.headers.map((x, j) => j === i ? { ...x, ...p } : x) } }));
+    const hShown = !!(F && F.show.headers);
+    const saveChannel = () => {
+      const t = this.CT[F.type], need = { telegram: ['botToken', 'chatId'], email: ['host', 'to'], discord: ['hookUrl'], slack: ['hookUrl'], webhook: ['url'], custom: ['endpoint'] }[F.type];
+      if (!F.name.trim() || need.some(k => !(F.cfg[k] || '').trim())) return this.setState({ chForm: { ...F, err: 'Give the channel a name and fill in the ' + t[0] + ' fields.' } });
+      const ch = { id: F.id || 'c' + (++this.seq), type: F.type, name: F.name.trim(), enabled: true, last: { state: 'never' }, cfg: F.cfg, headers: F.headers, tls: F.tls };
+      this.setState(s => ({ chForm: null, channels: F.id ? s.channels.map(x => x.id === F.id ? { ...x, ...ch, enabled: x.enabled, last: x.last, broken: null } : x) : [...s.channels, ch] }));
+      this.audit(F.id ? 'channel.update' : 'channel.create', ch.name); this.toast(F.id ? ch.name + ' saved' : ch.name + ' added. Send a test to check it.');
+    };
+
+    const sevTxt = { info: 'Any severity', warning: 'Warning and above', critical: 'Critical only' };
+    const names = ids => ids.map(id => (S.channels.find(c => c.id === id) || {}).name).filter(Boolean).join(' and ') || 'no channel';
+    const routeRows = S.routes.map(r => ({ name: r.name, muted: r.muted, op: r.muted ? .5 : 1, muteIcon: r.muted ? 'ph-bell-slash' : 'ph-bell', muteTitle: r.muted ? 'Unmute route' : 'Mute route',
+      match: [...(r.types.length ? r.types.map(t => this.ET[t][0]) : ['Every event']), sevTxt[r.minSev], r.project !== 'all' && 'Project ' + r.project, r.host !== 'all' && 'Host ' + r.host, r.service && 'Service ' + r.service].filter(Boolean).map(t => ({ t })),
+      chans: r.channels.map(id => S.channels.find(c => c.id === id)).filter(Boolean).map(c => ({ name: c.name, icon: this.CT[c.type][1] })), noChans: !r.channels.length,
+      opts: [r.throttle ? 'Throttle ' + (r.throttle >= 60 ? '1 hour' : r.throttle + ' min') : 'No throttle', r.quiet && 'Quiet ' + r.qFrom + ' to ' + r.qTo, r.onChange && 'Only on change'].filter(Boolean).join(' · '),
+      toggleMute: () => { this.setState(s => ({ routes: s.routes.map(x => x.id === r.id ? { ...x, muted: !x.muted } : x) })); this.audit(r.muted ? 'route.unmute' : 'route.mute', r.name); this.toast('"' + r.name + '" ' + (r.muted ? 'resumed' : 'muted')); },
+      edit: () => this.setState({ routeForm: { ...r, types: [...r.types], channels: [...r.channels], err: '' } }),
+      del: () => this.ask('Delete route "' + r.name + '"?', 'Matching events stop being sent to ' + names(r.channels) + '. The channels themselves are kept.', 'Delete route', () => { this.setState(s => ({ routes: s.routes.filter(x => x.id !== r.id) })); this.audit('route.delete', r.name); this.toast('Route deleted'); }, true) }));
+    const RF = S.routeForm, setR = p => this.setState(s => ({ routeForm: { ...s.routeForm, err: '', ...p } })), tog = (a, v) => a.includes(v) ? a.filter(x => x !== v) : [...a, v];
+    const hits = RF ? S.signals.filter(g => this.matches(RF, g)) : [];
+    const saveRoute = () => {
+      if (!RF.name.trim() || !RF.channels.length) return setR({ err: 'Give the route a name and pick at least one channel.' });
+      const { err, ...r } = RF; r.name = r.name.trim(); r.id = r.id || 'r' + (++this.seq);
+      this.ask((RF.id ? 'Save changes to "' : 'Create route "') + r.name + '"?', 'From now on, matching events are sent to ' + names(r.channels) + '.' + (RF.id ? ' This replaces the current rule straight away.' : ''), RF.id ? 'Save route' : 'Create route', () => { this.setState(s => ({ routeForm: null, routes: RF.id ? s.routes.map(x => x.id === r.id ? r : x) : [...s.routes, r] })); this.audit(RF.id ? 'route.update' : 'route.create', r.name); this.toast('Route "' + r.name + '" saved'); });
+    };
+
+    const sourceRows = S.sources.map(s => { const key = 'src:' + s.id, fresh = !!s.fresh && isAdmin, shown = (!!S.reveal[key] || fresh) && isAdmin, url = 'https://flightdeck.acme.dev/ingest/' + s.slug;
+      const curl = 'curl -X POST ' + url + ' \\\n  -H "Authorization: Bearer $FD_INGEST_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d \'{"name":"HighErrorRate","severity":"critical","status":"firing","summary":"api 5xx above 2% for 5m"}\'';
+      return { name: s.name, kind: s.kind, url, fresh, last: s.last ? 'last received ' + this.rel(s.last) : 'nothing received yet', token: shown ? s.token : 'fd_in_••••••••' + s.token.slice(-4), tokFg: shown ? 'var(--text)' : 'var(--text3)', eye: shown ? 'ph-eye-slash' : 'ph-eye', curl,
+        reveal: () => { if (!shown) this.audit('secret.reveal', s.name + ' (ingest token)'); this.setState(x => ({ reveal: { ...x.reveal, [key]: !shown }, sources: x.sources.map(y => y.id === s.id ? { ...y, fresh: false } : y) })); },
+        copyUrl: copy(url, 'Ingest URL copied'), copyCurl: copy(curl, 'curl example copied'), copyTok: copy(s.token, 'Token copied'),
+        done: () => this.setState(x => ({ sources: x.sources.map(y => y.id === s.id ? { ...y, fresh: false } : y) })),
+        del: () => this.ask('Delete source ' + s.name + '?', 'Its ingest URL and token stop working immediately. Whatever posts to it will get 401 until it is given a new source.', 'Delete source', () => { this.setState(x => ({ sources: x.sources.filter(y => y.id !== s.id) })); this.audit('source.delete', s.name); this.toast(s.name + ' deleted'); }, true) }; });
+
+    const af = S.af;
+    const acts = S.audit.filter(a => (af.actor === 'all' || a.user.startsWith(af.actor)) && (af.action === 'all' || a.action === af.action || (af.action === 'transmitter' && /^(channel|route|source|notify|secret)\./.test(a.action))) && (af.result === 'all' || a.result === af.result) && inRange(a.ts, af.range));
+    const PS = { pending: ['Pending', 'var(--text2)', 'var(--nbg)', 'ph-clock'], in_progress: ['In progress', 'var(--ai)', 'var(--abg)', 'ph-circle-notch'], success: ['Success', 'var(--green)', 'var(--gbg)', 'ph-check'], failure: ['Failure', 'var(--red)', 'var(--rbg)', 'ph-x'], cancelled: ['Cancelled', 'var(--text2)', 'var(--nbg)', 'ph-prohibit'] };
+    const deployGroups = [...new Set(this.ciRuns.map(r => r.repo))].map(repo => { const l = this.ciRuns.filter(r => r.repo === repo && (S.depF === 'all' || r.status === S.depF)); return { repo, project: l.length ? l[0].project : '', rows: l.map(r => { const p = PS[r.status], st = S.st[r.services[0]], drift = r.status === 'success' && st && st.pending === r.sha;
+      return { label: p[0], pc: p[1], pb: p[2], icon: p[3], sha: r.sha, msg: r.msg, branch: r.branch, actor: r.actor, dur: r.dur, run: '#' + r.run, started: this.rel(now - r.ago * 60000), updated: 'updated ' + this.rel(now - r.upd * 60000), hasNote: !!drift, note: drift ? 'Not live: ' + this.svc(r.services[0]).host + ' still runs ' + st.sha : '',
+        services: r.services.map(id => ({ name: id, go: () => this.openService(id, 'deploys') })), openRun: e => { e.preventDefault(); this.toast('Opens GitHub Actions run #' + r.run + ' in ' + r.repo); } }; }) }; }).filter(g => g.rows.length);
+
+    const histOn = (this.props.logHistory ?? true) !== false, hr = S.hRes && S.hRes.svc === S.sel ? S.hRes : null, hDone = histOn && !S.hLoading && !!hr;
+    const tx = t => !loading && S.tx === t;
+    return {
+      ro: !isAdmin, roTitle: isAdmin ? '' : 'Needs the admin role', admOp: isAdmin ? 1 : .45, admCur: isAdmin ? 'pointer' : 'not-allowed',
+      roOp: !canOp, opTitle: canOp ? '' : 'Needs the operator role', opOp: canOp ? 1 : .45, opCur: canOp ? 'pointer' : 'not-allowed',
+      chRoTxt: canOp ? 'Read-only: editing channels and revealing secrets needs the admin role. You can still send a test.' : 'Read-only: your role can view channels. Sending a test needs operator; editing and revealing secrets need admin.',
+      bellIcon: S.mute ? 'ph-bell-slash' : 'ph-bell', hasUnread: unread > 0, unreadTxt: unread > 9 ? '9+' : String(unread), unreadLine: unread ? unread + ' unread' : 'All read',
+      openSignals: () => this.setState({ sigDrawer: true, palette: false }), closeSignals: () => this.setState({ sigDrawer: false }), sigOpen: S.sigDrawer && S.screen !== 'signin',
+      viewAllSignals: () => this.setState({ sigDrawer: false, screen: 'home', home: 'transmitter', tx: 'signals' }),
+      readAll: () => this.setState(s => ({ signals: s.signals.map(g => ({ ...g, read: true })) })),
+      isMuted: !!S.mute, muteTxt: S.mute ? 'until ' + hhmm(S.mute.until) : '', unmute, muteMenu: S.muteMenu && !S.mute,
+      muteBtn: S.mute ? unmute : () => this.setState(s => ({ muteMenu: !s.muteMenu })), muteLabel: S.mute ? 'Unmute' : 'Mute all', muteIcon: S.mute ? 'ph-bell' : 'ph-bell-slash',
+      muteOpts: [{ label: 'For 30 minutes', go: muteFor('for 30 minutes', 18e5) }, { label: 'For 1 hour', go: muteFor('for 1 hour', 36e5) }, { label: 'For 8 hours', go: muteFor('for 8 hours', 288e5) }],
+      pageTx: isHome && S.home === 'transmitter', pageActivity: isHome && S.home === 'activity', pageDeploys: isHome && S.home === 'deploys',
+      txTabs: [['signals', 'Signals', unread || ''], ['sources', 'Sources', S.sources.length + 1], ['routes', 'Routes', S.routes.length], ['channels', 'Channels', S.channels.length]].map((t, i) => ({ label: t[1], count: String(t[2]), arrow: i > 1, ...tab(S.tx === t[0]), go: () => this.setState({ tx: t[0], muteMenu: false }) })),
+      txLoading: loading, skel: [{ w: '42%' }, { w: '58%' }, { w: '36%' }, { w: '50%' }, { w: '44%' }],
+      txSignals: tx('signals'), txSources: tx('sources'), txRoutes: tx('routes'), txChannels: tx('channels'),
+      sf: S.sf, sfOn: ons('sf', ['sev', 'type', 'project', 'host', 'range', 'q']), df: S.df, dfOn: ons('df', ['sev', 'type']),
+      sigGroups: group(pageList), sigEmpty: !pageList.length, sigEmptyTxt: S.signals.length ? 'No signals match these filters.' : 'Nothing has happened yet that Transmitter needs to tell you about.',
+      drawerGroups: group(drawerList), drawerEmpty: !drawerList.length,
+      sourceRows, noSources: !S.sources.length,
+      addSource: () => { const n = 'webhook-' + this.hex(4); this.setState(s => ({ sources: [...s.sources, { id: 's' + (++this.seq), name: n, kind: 'Generic', slug: n, token: 'fd_in_demo_' + this.hex(12), last: null, fresh: true }] })); this.audit('source.create', n); this.toast('Source created. Copy its token now.'); },
+      routeRows, noRoutes: !S.routes.length,
+      addRoute: () => this.setState({ routeForm: { id: null, name: '', types: [], minSev: 'info', project: 'all', host: 'all', service: '', channels: [], throttle: 0, quiet: false, qFrom: '22:00', qTo: '07:00', onChange: false, muted: false, err: '' } }),
+      channelCards, noChannels: !S.channels.length,
+      addChannel: () => this.setState({ chForm: { id: null, type: 'telegram', name: '', cfg: { method: 'POST', port: '587' }, headers: [], tls: true, show: {}, err: '' } }),
+      closeForms: () => this.setState({ chForm: null, routeForm: null }),
+      chOpen: !!F, chTitle: F && F.id ? 'Edit channel' : 'Add channel', chSave: F && F.id ? 'Save changes' : 'Add channel', chErr: F ? F.err : '', chHasErr: !!(F && F.err), cf, saveChannel,
+      chTypes: F ? Object.keys(this.CT).map(k => ({ label: this.CT[k][0], icon: this.CT[k][1], ...chip(F.type === k), go: () => this.setState(s => ({ chForm: { ...s.chForm, type: k, err: '' } })) })) : [],
+      cft: F ? { telegram: F.type === 'telegram', email: F.type === 'email', hook: F.type === 'discord' || F.type === 'slack', webhook: F.type === 'webhook', custom: F.type === 'custom', payload: F.type === 'webhook' || F.type === 'custom' } : {},
+      cfTls: { on: !!(F && F.tls), bg: swBg(F && F.tls), j: swJ(F && F.tls) }, toggleTls: () => this.setState(s => ({ chForm: { ...s.chForm, tls: !s.chForm.tls } })),
+      cfHeaders: F ? F.headers.map((x, i) => ({ k: x.k, v: x.v, type: hShown ? 'text' : 'password', onK: e => setH(i, { k: e.target.value }), onV: e => setH(i, { v: e.target.value }), del: () => this.setState(s => ({ chForm: { ...s.chForm, headers: s.chForm.headers.filter((y, j) => j !== i) } })) })) : [],
+      addHeader: () => this.setState(s => ({ chForm: { ...s.chForm, headers: [...s.chForm.headers, { k: '', v: '' }] } })),
+      toggleHeaders: () => { if (!hShown && F.id) this.audit('secret.reveal', F.name + ' (headers)'); this.setState(s => ({ chForm: { ...s.chForm, show: { ...s.chForm.show, headers: !hShown } } })); }, hdrEye: hShown ? 'ph-eye-slash' : 'ph-eye',
+      payload: '{\n  "id": "sig_01JCXK4T",\n  "type": "service.exited",\n  "severity": "critical",\n  "title": "worker exited with code 137",\n  "project": "storefront",\n  "service": "worker",\n  "host": "vega",\n  "at": "2026-11-13T09:36:02Z",\n  "data": { "exit_code": 137, "reason": "OOMKilled" }\n}',
+      rfOpen: !!RF, saveRoute,
+      rf: RF ? { title: RF.id ? 'Edit route' : 'New route', save: RF.id ? 'Save route' : 'Create route', name: RF.name, project: RF.project, host: RF.host, service: RF.service, throttle: String(RF.throttle), qFrom: RF.qFrom, qTo: RF.qTo, quiet: RF.quiet, onChange: RF.onChange, qBg: swBg(RF.quiet), qJ: swJ(RF.quiet), qOp: RF.quiet ? 1 : .45, cBg: swBg(RF.onChange), cJ: swJ(RF.onChange), err: RF.err, hasErr: !!RF.err } : {},
+      rfOn: { name: e => setR({ name: e.target.value }), project: e => setR({ project: e.target.value }), host: e => setR({ host: e.target.value }), service: e => setR({ service: e.target.value.trim() }), throttle: e => setR({ throttle: Number(e.target.value) }), qFrom: e => setR({ qFrom: e.target.value }), qTo: e => setR({ qTo: e.target.value }), quiet: () => setR({ quiet: !RF.quiet }), onChange: () => setR({ onChange: !RF.onChange }) },
+      rfTypes: RF ? Object.keys(this.ET).map(t => ({ label: this.ET[t][0], ...chip(RF.types.includes(t)), go: () => setR({ types: tog(RF.types, t) }) })) : [],
+      rfSev: RF ? [['info', 'Any'], ['warning', 'Warning +'], ['critical', 'Critical']].map(x => ({ label: x[1], ...seg(RF.minSev === x[0]), go: () => setR({ minSev: x[0] }) })) : [],
+      rfChans: RF ? S.channels.map(c => ({ name: c.name, icon: this.CT[c.type][1], ...chip(RF.channels.includes(c.id)), go: () => setR({ channels: tog(RF.channels, c.id) }) })) : [],
+      rfTestTxt: S.signals.length ? hits.length + ' of the last ' + S.signals.length + ' signals would have matched this rule.' : 'No signals recorded yet to test against.',
+      rfTest: hits.slice(0, 5).map(g => ({ sevColor: SC[g.sev], title: g.title, when: this.rel(g.ts) })),
+      hasConfirm: !!S.confirm, cfm: S.confirm ? { title: S.confirm.title, body: S.confirm.body, btn: S.confirm.btn, bg: S.confirm.danger ? 'var(--red)' : 'var(--accent)', fg: S.confirm.danger ? 'var(--bg1)' : '#14100a' } : {},
+      cancelConfirm: () => this.setState({ confirm: null }), doConfirm: () => { const c = S.confirm; this.setState({ confirm: null }); if (c) c.fn(); }, confirmRef: this.confirmRef,
+      af, afOn: ons('af', ['actor', 'action', 'result', 'range']), actCount: acts.length + (acts.length === 1 ? ' action' : ' actions'), actEmpty: !acts.length,
+      activityRows: acts.map(a => ({ when: this.rel(a.ts), at: this.fmtT(a.ts), user: a.user, role: a.role, action: a.action, target: a.target, result: a.result, rc: a.result === 'ok' ? 'var(--green)' : 'var(--red)', rb: a.result === 'ok' ? 'var(--gbg)' : 'var(--rbg)' })),
+      depF: S.depF, onDepF: e => this.setState({ depF: e.target.value }), deployGroups, depEmpty: !deployGroups.length,
+      logSeg: [['live', 'Live tail'], ['history', 'History']].map(x => ({ label: x[1], ...seg(S.logMode === x[0]), go: () => this.setState({ logMode: x[0] }) })),
+      logLive: S.logMode === 'live', logHist: S.logMode === 'history', backToLive: () => this.setState({ logMode: 'live' }),
+      histOff: !histOn, histOp: histOn ? 1 : .45, histIdle: histOn && !S.hLoading && !hr, histLoading: histOn && S.hLoading, histDone: hDone, histNone: hDone && !hr.rows.length,
+      hq: S.hq, onHq: e => this.setState({ hq: e.target.value }), hrange: S.hrange, onHrange: e => this.setState({ hrange: e.target.value }), hKey: e => { if (e.key === 'Enter') this.runHistory(); }, runHistory: () => this.runHistory(),
+      histTxt: hr ? hr.rows.length + (hr.rows.length === 120 ? '+' : '') + ' lines' + (hr.q ? ' matching "' + hr.q + '"' : '') + ' in the ' + spanTxt[hr.range] + '. Stored history, not the live tail.' : '',
+      histRows: hr ? hr.rows.map(l => ({ t: new Date(l.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + this.fmtT(l.ts), msg: l.msg, color: l.lvl === 'error' ? 'var(--red)' : l.lvl === 'warn' ? 'var(--accent)' : 'var(--info)', fg: l.lvl === 'error' ? 'var(--errfg)' : l.lvl === 'warn' ? 'var(--warnfg)' : 'var(--code)', bg: l.lvl === 'error' ? 'var(--errrow)' : 'transparent' })) : []
+    };
   }
 
   tick = () => {
@@ -641,35 +1184,35 @@ class Component extends DCLogic {
       h.cpu.shift(); h.mem.shift();
       if (live && Math.random() < s.rate) { const n = Math.random() < .25 ? 2 : 1; for (let i = 0; i < n; i++) { const l = this.genLine(s); this.pushLog(s.id, l[0], l[1], now + i); } }
     });
-    this.setState({ tick: now });
+    this.setState(s => ({ tick: now, mute: s.mute && s.mute.until <= now ? null : s.mute }));
   };
   pushLog(id, lvl, msg, ts) { const a = this.logs[id]; a.push({ id: ++this.seq, ts: ts || Date.now(), svc: id, lvl, msg }); if (a.length > 320) a.splice(0, a.length - 320); }
   toast(msg) { clearTimeout(this._tt); this.setState({ toast: msg }); this._tt = setTimeout(() => this.setState({ toast: null }), 3400); }
-  audit(action, target, result) { const e = { t: this.fmtT(Date.now()), user: 'mira@acme.dev', role: this.state.role, action, target, result: result || 'ok' }; this.setState(s => ({ audit: [e, ...s.audit] })); }
+  audit(action, target, result) { const e = { ts: Date.now(), t: this.fmtT(Date.now()), user: 'mira@acme.dev', role: this.state.role, action, target, result: result || 'ok' }; this.setState(s => ({ audit: [e, ...s.audit] })); }
   setSt(id, patch) { this.setState(s => ({ st: { ...s.st, [id]: { ...s.st[id], ...patch } } })); }
   busy(id) { return !['running', 'exited'].includes(this.state.st[id].status); }
 
   restart(id) {
     if (this.busy(id)) return; const s = this.svc(id);
     this.setSt(id, { status: 'restarting', restarts: this.state.st[id].restarts + 1 });
-    this.pushLog(id, 'warn', 'flightdeck: restart requested by mira@acme.dev'); this.audit('service.restart', id + '@' + s.host);
-    setTimeout(() => { this.setSt(id, { status: 'running', exit: null }); this.pushLog(id, 'info', 'flightdeck: container started'); this.toast(id + ' restarted on ' + s.host); }, 2400);
+    this.pushLog(id, 'warn', 'flightdeck: restart requested by mira@acme.dev'); this.audit('service.restart', id + '@' + s.host); this.signal('service.restarting', id + ' is restarting on ' + s.host, s);
+    setTimeout(() => { this.setSt(id, { status: 'running', exit: null }); this.pushLog(id, 'info', 'flightdeck: container started'); this.signal('service.recovered', id + ' recovered on ' + s.host, s); this.toast(id + ' restarted on ' + s.host); }, 2400);
   }
   redeploy(id) {
     if (this.busy(id)) return; const s = this.svc(id), st = this.state.st[id], target = st.pending || st.sha;
     this.setSt(id, { status: 'deploying' });
     this.pushLog(id, 'warn', 'flightdeck: pulling ' + (s.git ? s.image + ':' + target : this.img(s, st)) + ' and recreating container');
-    this.audit('service.redeploy', id + '@' + s.host + (target ? ' → ' + target : ''));
-    setTimeout(() => { this.setSt(id, { status: 'running', exit: null, sha: target, pending: null }); this.pushLog(id, 'info', 'flightdeck: container started' + (target ? ' on ' + target : '')); this.toast(target ? id + ' is now running ' + target : id + ' redeployed'); }, 3200);
+    this.audit('service.redeploy', id + '@' + s.host + (target ? ' → ' + target : '')); this.signal('deploy.in_progress', 'Redeploy of ' + id + ' started on ' + s.host, s);
+    setTimeout(() => { this.setSt(id, { status: 'running', exit: null, sha: target, pending: null }); this.pushLog(id, 'info', 'flightdeck: container started' + (target ? ' on ' + target : '')); this.signal('deploy.succeeded', target ? id + ' is live on ' + target : id + ' redeployed', s); this.toast(target ? id + ' is now running ' + target : id + ' redeployed'); }, 3200);
   }
   applyEnv(id) {
     const p = this.state.pend[id] || {}, keys = Object.keys(p); if (!keys.length || this.busy(id)) return;
     this.setState(s => ({ env: { ...s.env, [id]: s.env[id].map(e => e.k in p ? { ...e, v: p[e.k] } : e) }, pend: { ...s.pend, [id]: {} } }));
     this.setSt(id, { status: 'recreating' }); this.pushLog(id, 'warn', 'flightdeck: environment changed (' + keys.join(', ') + '), recreating container');
-    this.audit('env.update', id + ' (' + keys.join(', ') + ')');
+    this.audit('env.update', id + ' (' + keys.join(', ') + ')'); this.signal('env.changed', id + ' recreated after ' + keys.join(', ') + ' changed', this.svc(id));
     setTimeout(() => { this.setSt(id, { status: 'running', exit: null }); this.pushLog(id, 'info', 'flightdeck: container started'); this.toast(id + ' recreated with ' + keys.length + ' updated variable' + (keys.length > 1 ? 's' : '')); }, 2800);
   }
-  openService(id, tab) { const s = this.svc(id); this.setState({ screen: 'project', projectId: s.project, ptab: 'services', sel: id, dtab: tab || 'deploys', palette: false, projMenu: false, edit: null }); }
+  openService(id, tab) { const s = this.svc(id); this.setState({ logMode: 'live', screen: 'project', projectId: s.project, ptab: 'services', sel: id, dtab: tab || 'deploys', palette: false, projMenu: false, edit: null }); }
   openProject(id) { this.setState({ screen: 'project', projectId: id, ptab: 'services', sel: null, palette: false, projMenu: false }); }
 
   layout(list, board, rich) {
@@ -786,21 +1329,22 @@ class Component extends DCLogic {
       ...drift.map(x => ({ color: A, icon: 'ph-git-commit', title: `${x.s.id}: deploy ${x.st.pending} never went out`, detail: `CI finished 22m ago · ${x.s.host} still runs ${x.st.sha}`, btn: 'Inspect', go: () => this.openService(x.s.id, 'deploys') })),
       ...this.hosts.filter(h => !S.online[h.id]).map(h => ({ color: 'var(--text2)', icon: 'ph-plugs', title: `Agent on ${h.id} is offline`, detail: `${S.dropped[h.id] ? 'Token revoked just now' : 'Last heartbeat 14m ago'} · ${this.svcs.filter(s => s.host === h.id).length} services unverified`, btn: 'Hosts', go: () => this.setState({ screen: 'home', home: 'hosts' }) }))
     ];
-    const navDef = [['overview', 'Overview', 'ph-squares-four', attention.length ? String(attention.length) : ''], ['hosts', 'Hosts', 'ph-hard-drives', onl + '/' + this.hosts.length], ['settings', 'Settings', 'ph-gear-six', '']];
+    const navDef = [['overview', 'Overview', 'ph-squares-four', attention.length ? String(attention.length) : ''], ['deploys', 'Deploys', 'ph-rocket-launch', ''], ['activity', 'Activity', 'ph-clock-counter-clockwise', ''], ['transmitter', 'Transmitter', 'ph-broadcast', String(S.signals.filter(g => !g.read).length || '')], ['hosts', 'Hosts', 'ph-hard-drives', onl + '/' + this.hosts.length], ['settings', 'Settings', 'ph-gear-six', '']];
     const isHome = S.screen === 'home', isProject = S.screen === 'project';
     const pal = S.pq.toLowerCase();
     const palItems = [
       ...this.svcs.map(s => ({ icon: 'ph-cube', color: sv(s).color, label: s.id, sub: s.project + ' · ' + s.host, go: () => this.openService(s.id) })),
       ...this.projects.map(p => ({ icon: 'ph-folder-simple', color: projColor(p.id), label: p.id, sub: 'project', go: () => this.openProject(p.id) })),
-      ...this.hosts.map(h => ({ icon: 'ph-hard-drives', color: S.online[h.id] ? G : GR, label: h.id, sub: 'host · ' + h.runtime, go: () => this.setState({ screen: 'home', home: 'hosts', palette: false }) }))
+      ...this.hosts.map(h => ({ icon: 'ph-hard-drives', color: S.online[h.id] ? G : GR, label: h.id, sub: 'host · ' + h.runtime, go: () => this.setState({ screen: 'home', home: 'hosts', palette: false }) })),
+      ...[['transmitter', 'Transmitter'], ['deploys', 'Deploys'], ['activity', 'Activity']].map(p => ({ color: 'var(--line3)', label: p[1], sub: 'page', go: () => this.setState({ screen: 'home', home: p[0], palette: false }) }))
     ].filter(i => !pal || (i.label + ' ' + i.sub).toLowerCase().includes(pal));
     const pm = (label, v, o) => ({ label, v: v ? 'ph-check' : 'ph-minus', vc: v ? G : 'var(--wire)', o: o ? 'ph-check' : 'ph-minus', oc: o ? G : 'var(--wire)', a: 'ph-check', ac: G });
     const dE = tog(S.derr), xE = tog(S.xerr);
 
     return {
       isSignin: S.screen === 'signin', isApp: S.screen !== 'signin', isHome, isProject, role, isAdmin, notAdmin: !isAdmin, rich,
-      signIn: () => { this.setState({ screen: 'home', home: 'overview' }); this.audit('auth.login', 'oidc'); },
-      signOut: () => this.setState({ screen: 'signin', sel: null, palette: false, projMenu: false }),
+      signIn: () => { this.setState({ screen: 'home', home: 'overview' }); this.audit('auth.login', 'oidc'); this.signal('auth.login', 'mira@acme.dev signed in via SSO'); },
+      signOut: () => this.setState({ screen: 'signin', sel: null, palette: false, projMenu: false, sigDrawer: false, chForm: null, routeForm: null, confirm: null, muteMenu: false }),
       goHome: () => this.setState({ screen: 'home', projMenu: false }),
       agentsTxt: `${onl} of ${this.hosts.length} agents`,
       roleSeg: ['viewer', 'operator', 'admin'].map(r => ({ label: r[0].toUpperCase() + r.slice(1), ...seg(role === r), go: () => this.setState({ role: r, edit: null }) })),
@@ -837,8 +1381,8 @@ class Component extends DCLogic {
       stabs: [['tokens', 'Agent tokens'], ['roles', 'Roles & access'], ['audit', 'Audit log']].map(t => ({ label: t[1], ...tab(S.stab === t[0]), go: () => this.setState({ stab: t[0] }) })),
       stabTokens: S.stab === 'tokens', stabRoles: S.stab === 'roles', stabAudit: S.stab === 'audit',
       tokenRows: S.tokens.map(t => ({ ...t, fg: t.revoked ? GR : 'var(--code)', bg: t.fresh ? 'var(--abg)' : 'transparent', canRevoke: isAdmin && !t.revoked, revoked: !!t.revoked,
-        revoke: () => { this.setState(s => ({ tokens: s.tokens.map(x => x.name === t.name ? { ...x, revoked: true, used: 'revoked' } : x), online: t.host in s.online ? { ...s.online, [t.host]: false } : s.online, dropped: { ...s.dropped, [t.host]: true } })); this.audit('token.revoke', t.name); this.toast(t.host in S.online && S.online[t.host] ? `${t.name} revoked — connection to ${t.host} dropped` : t.name + ' revoked'); } })),
-      newToken: () => { const n = 'agent-' + this.hex(4); this.setState(s => ({ tokens: [...s.tokens, { name: n, host: 'unassigned', fp: 'fd_a_' + this.hex(4) + '…' + this.hex(4), created: 'today', used: 'never', fresh: true }] })); this.audit('token.create', n); this.toast('Token created — copy it now, it is shown only once'); },
+        revoke: () => { this.setState(s => ({ tokens: s.tokens.map(x => x.name === t.name ? { ...x, revoked: true, used: 'revoked' } : x), online: t.host in s.online ? { ...s.online, [t.host]: false } : s.online, dropped: { ...s.dropped, [t.host]: true } })); this.audit('token.revoke', t.name); this.signal('token.revoked', 'Agent token ' + t.name + ' revoked', { host: t.host in S.online ? t.host : null }); if (S.online[t.host]) this.signal('agent.disconnected', 'Agent on ' + t.host + ' disconnected', { host: t.host }); this.toast(t.host in S.online && S.online[t.host] ? `${t.name} revoked — connection to ${t.host} dropped` : t.name + ' revoked'); } })),
+      newToken: () => { const n = 'agent-' + this.hex(4); this.setState(s => ({ tokens: [...s.tokens, { name: n, host: 'unassigned', fp: 'fd_a_' + this.hex(4) + '…' + this.hex(4), created: 'today', used: 'never', fresh: true }] })); this.audit('token.create', n); this.signal('token.created', 'Agent token ' + n + ' created'); this.toast('Token created — copy it now, it is shown only once'); },
       roleHead: { viewer: role === 'viewer' ? A : GR, operator: role === 'operator' ? A : GR, admin: role === 'admin' ? A : GR },
       perms: [pm('See services, status and metrics', 1, 1), pm('Read and search logs', 1, 1), pm('Reveal environment values', 0, 1), pm('Restart and redeploy containers', 0, 1), pm('Edit environment (recreates container)', 0, 0), pm('Create and revoke agent tokens', 0, 0)],
       auditRows: S.audit.map(a => ({ ...a, rc: a.result === 'ok' ? G : R })),
@@ -860,6 +1404,7 @@ class Component extends DCLogic {
       bars: bk.map(b => ({ ih: Math.round(b[0] / mx * 38), eh: Math.round(b[1] / mx * 38) })),
       xcount: xl.length + ' lines',
       xrows: xl.slice(-170).map(l => lv(l, tc[l.svc])),
+      ...this.extraVals(),
       hasToast: !!S.toast, toast: S.toast,
       themeIcon: S.theme === 'dark' ? 'ph-sun' : 'ph-moon', toggleTheme: () => this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' }))
     };
