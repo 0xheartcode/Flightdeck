@@ -14,6 +14,8 @@ const base: Config = {
   maxPayloadBytes: 262_144,
   maxServices: 1000,
   actionsEnabled: false,
+  transmitterEnabled: false,
+  transmitterDbFile: ':memory:',
   actionTimeoutMs: 20_000,
   auditMax: 500,
   auditFile: '',

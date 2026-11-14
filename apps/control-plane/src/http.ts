@@ -27,6 +27,7 @@ import {
   unsign,
 } from './oidclogin.js';
 import { logger } from './logger.js';
+import { registerTransmitter } from './transmitter/routes.js';
 
 const log = logger.child({ component: 'http' });
 
@@ -195,6 +196,13 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
       identityEnabled: idEnabled,
       loginFlow: loginEnabled,
       logSearch: Boolean(ctx.loki),
+      // Server-wide action switch (FD_ENABLE_ACTIONS). The UI disables every
+      // action control and shows a banner when this is off, so operators see
+      // why restart/redeploy/set-env are unavailable instead of a silent no-op.
+      actionsEnabled: config.actionsEnabled,
+      // Whether the Transmitter backend is available (so the UI uses the real
+      // client instead of the mock preview).
+      transmitter: Boolean(ctx.transmitter),
       subject: auth.principal?.subject,
       name: auth.principal?.name,
       roles: auth.principal?.roles ?? [],
@@ -252,6 +260,10 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     const limit = Number(c.req.query('limit'));
     return c.json({ audit: audit.list(Number.isFinite(limit) && limit > 0 ? limit : undefined) });
   });
+
+  // Transmitter admin API (/api/transmitter/*) and inbound ingest
+  // (/transmitter/ingest/:sourceId), when the hub is enabled.
+  registerTransmitter(app, ctx);
 
   return app;
 }
