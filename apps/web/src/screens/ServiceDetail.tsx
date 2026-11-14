@@ -38,6 +38,7 @@ export function ServiceDetail({ serviceId, onNavigate, logSearchEnabled }: Servi
   });
   const stream = useLogStream(serviceId);
   const [tab, setTab] = useState('logs');
+  const [logMode, setLogMode] = useState<'tail' | 'history'>('tail');
   const [confirm, setConfirm] = useState<null | 'restart' | 'redeploy'>(null);
 
   // Surface action outcomes as toasts (the server is authoritative).
@@ -175,20 +176,56 @@ export function ServiceDetail({ serviceId, onNavigate, logSearchEnabled }: Servi
       <div className="mt-4">
         {tab === 'logs' ? (
           <div className="flex flex-col gap-4">
-            {!stream.connected ? (
-              <Badge tone="warn" dot>
-                Live stream connecting…
-              </Badge>
-            ) : null}
-            <LogViewer
-              rows={logRows}
-              className="h-[48vh]"
-              empty={{
-                title: 'No log lines yet',
-                description: 'New output will appear here live.',
-              }}
-            />
-            {logSearchEnabled ? <LogSearchPanel serviceId={serviceId} /> : null}
+            <div className="flex items-center justify-between gap-3">
+              {logSearchEnabled ? (
+                <div
+                  role="tablist"
+                  aria-label="Log mode"
+                  className="inline-flex rounded-lg border border-line bg-sunken p-0.5 text-sm"
+                >
+                  {(
+                    [
+                      ['tail', 'Live tail'],
+                      ['history', 'History'],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      role="tab"
+                      type="button"
+                      aria-selected={logMode === mode}
+                      onClick={() => setLogMode(mode)}
+                      className={`rounded-md px-3 py-1 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none ${
+                        logMode === mode
+                          ? 'bg-surface text-fg shadow-[var(--segsh)]'
+                          : 'text-muted hover:text-fg'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span />
+              )}
+              {logMode === 'tail' && !stream.connected ? (
+                <Badge tone="warn" dot>
+                  Live stream connecting…
+                </Badge>
+              ) : null}
+            </div>
+            {logMode === 'history' && logSearchEnabled ? (
+              <LogSearchPanel serviceId={serviceId} />
+            ) : (
+              <LogViewer
+                rows={logRows}
+                className="h-[48vh]"
+                empty={{
+                  title: 'No log lines yet',
+                  description: 'New output will appear here live.',
+                }}
+              />
+            )}
           </div>
         ) : null}
         {tab === 'env' ? (
