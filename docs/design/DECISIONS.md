@@ -38,7 +38,14 @@ autonomous UI build makes choices the brief left open.
   The UI uses the HTTP client when `me.transmitter` is true and the mock (with a
   preview banner) otherwise. The typed client + mock remain for dev/tests. How to
   change: the contract is `TRANSMITTER-API.md`.
-- **Email/SMTP sender is deferred.** Every sender is implemented except Email,
-  which would need an SMTP library; the channel kind exists and returns a clear
-  "not implemented" error on send/test. How to change: add an SMTP sender in
-  `transmitter/senders.ts`.
+- **All senders implemented**, including Email/SMTP via `nodemailer`. A channel
+  with incomplete config fails the send cleanly rather than connecting.
+- **Interaction tests now run on jsdom + Testing Library** (reversing the earlier
+  zero-dep decision, now that the UI milestone is substantial): real click,
+  keyboard and focus/Escape tests for Toggle, Tabs, ConfirmDialog and Drawer, in
+  addition to the static render tests. vitest `environment: 'jsdom'`.
+- **Hosts topology "map" was not built as a screen.** The design's `map` view is
+  the command palette's jump-to map, and the designed Hosts screen shows host
+  metadata (runtime, OS, agent version, IP, cores) the API does not expose — so
+  per the no-fake-data rule it is omitted. Instead the command palette gained
+  projects (and keeps services) as real jump targets.

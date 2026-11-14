@@ -94,12 +94,27 @@ Appended after each milestone: what shipped, the commits, and open gaps.
   token, 202 on the real one); the UI rendered the real channel with no preview
   banner.
 
+## Finish pass (fold-in before merge)
+
+- **Email/SMTP sender** implemented via `nodemailer` (incomplete config fails
+  cleanly; no real mail in tests).
+- **Global mute** end-to-end: `tx_settings` store + `/api/transmitter/mute`
+  (GET/POST/DELETE, audited); the dispatcher records signals but skips delivery
+  while muted. UI: a "Mute all" menu (30 min / 1 hour / 8 hours) and a
+  "Notifications muted until …" banner with Resume.
+- **Design-fidelity**: signals grouped Today / Earlier; per-channel last-delivery
+  status (Delivered/Disabled/Failed); command palette gains projects as jump
+  targets (the design's "map"; host metadata omitted — no API, no fake data).
+- **jsdom + Testing Library** added: real interaction tests (Toggle click, Tabs
+  arrow-keys, ConfirmDialog Escape+confirm, Drawer open/close). Web **47 tests**,
+  control-plane **140 tests**; full gate green.
+- Verified live: seeded channels + signals + mute via the API and confirmed the
+  UI (Today grouping, muted-until banner, disabled-channel status) in dark theme.
+
 ## Open / unverified
 
 - Real infrastructure actions (restart/redeploy/set_env) were **not** triggered
   against live services per the safety rules — verified only through the UI gate,
-  confirm dialog, and the WS send path.
-- Email/SMTP sender not implemented (returns a clear error); every other sender
-  is. No real notifications were sent in testing (mock sinks / no matching route).
-- Interaction tests use static render assertions (no jsdom); a jsdom + Testing
-  Library setup would add real keyboard/focus tests (see DECISIONS.md).
+  confirm dialog, and the WS send path (gli #23).
+- No real notifications were sent in testing (mock sinks / no matching route /
+  invalid creds). SMTP path exercised only for its config-guard, not a real send.

@@ -114,11 +114,21 @@ size-capped (e.g. 64 KiB) and schema-validated before it becomes a signal.
   backoff; failures are recorded as a `Delivery` with `ok: false` and the error.
 - **No secret logging:** credentials and inbound tokens never appear in logs,
   deliveries or audit entries.
-- **Senders:** Telegram (fixed API host) and the webhook family (Discord, Slack,
-  generic webhook, custom connector) are implemented over HTTPS POST. **Email
-  (SMTP) is not implemented in this build** — the channel kind exists and a test
-  returns a clear "SMTP sender is not implemented" delivery error; wiring an SMTP
-  library is the one remaining sender.
+- **Senders:** Telegram (fixed API host), the webhook family (Discord, Slack,
+  generic webhook, custom connector) over HTTPS POST, and **Email (SMTP) via
+  nodemailer** are all implemented. A channel with incomplete config fails the
+  send with a clear error rather than connecting.
+
+## Global mute
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/mute` | `{ until: number \| null }` — epoch ms, or null when not muted |
+| POST | `/mute` | body `{ minutes }` (1..10080); mutes all channels until now+minutes |
+| DELETE | `/mute` | resume delivery immediately |
+
+While muted, inbound signals are still recorded in the inbox; the dispatcher
+simply skips all deliveries until the window passes. Mute/unmute are audited.
 
 ## Permissions
 
