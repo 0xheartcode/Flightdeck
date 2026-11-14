@@ -1,20 +1,206 @@
 @import 'tailwindcss';
 
+/*
+ * Design tokens, imported from the Flightdeck design
+ * (docs/design/source/Flightdeck.dc.html). Light is the default on :root; dark
+ * applies when the OS prefers dark (and no explicit light override) or when the
+ * theme toggle sets [data-theme='dark']. See lib/theme.ts.
+ */
 :root {
-  color-scheme: dark;
+  --bg0: #f3f3f0;
+  --bg1: #fff;
+  --bg2: #fff;
+  --bg3: #efefec;
+  --bgc: #f8f8f6;
+  --dot: #d9d9d4;
+  --line: #e3e3df;
+  --line2: #cfcfc9;
+  --line3: #a5a5a0;
+  --row: #eeeeea;
+  --text: #191b1e;
+  --text2: #53585e;
+  --text3: #686d74;
+  --code: #2b2f34;
+  --accent: #f5b83d;
+  --accent-h: #ffca5c;
+  --ai: #8a5600;
+  --green: #18794e;
+  --red: #c5372c;
+  --blue: #2f6fd0;
+  --mute: #8b9096;
+  --track: #e3e3df;
+  --gbg: rgba(24, 121, 78, 0.1);
+  --rbg: rgba(197, 55, 44, 0.08);
+  --abg: rgba(245, 184, 61, 0.2);
+  --nbg: rgba(20, 20, 20, 0.05);
+  --shadow: 0 1px 2px rgba(20, 20, 20, 0.05), 0 3px 10px rgba(20, 20, 20, 0.04);
+  --pop: 0 16px 48px rgba(20, 20, 20, 0.18);
+  --overlay: rgba(30, 30, 28, 0.28);
+  --errrow: rgba(197, 55, 44, 0.06);
+  --errfg: #a12b22;
+  --warnfg: #7a4d00;
+  --info: #b7c4dc;
+  --wire: #b4b4ae;
+  --seg: #fff;
+  --segsh: 0 1px 2px rgba(0, 0, 0, 0.14);
+  --segtrack: #e9e9e5;
+  --navon: #e6e6e1;
+  --tag-l: 0.5;
+  --lane: rgba(255, 255, 255, 0.7);
 }
 
-body {
-  margin: 0;
-  background-color: #0b0d12;
-  color: #e6e8ee;
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    Helvetica,
-    Arial,
-    sans-serif;
+/*
+ * Dark token values. Two selectors carry the same block: the explicit toggle
+ * ([data-theme='dark']) and the OS-dark default (prefers-color-scheme: dark,
+ * unless the user forced light). They are kept separate rather than combined so
+ * the media query can be scoped to :not([data-theme='light']).
+ */
+:root[data-theme='dark'] {
+  --bg0: #0d0f12;
+  --bg1: #13161b;
+  --bg2: #191d23;
+  --bg3: #20252d;
+  --bgc: #0f1216;
+  --dot: #232831;
+  --line: #262b34;
+  --line2: #333a45;
+  --line3: #4a5361;
+  --row: #1d2128;
+  --text: #e9ecf1;
+  --text2: #a3abb8;
+  --text3: #7d8795;
+  --code: #c9cfd8;
+  --accent: #f5b83d;
+  --accent-h: #ffca5c;
+  --ai: #f5b83d;
+  --green: #4ccb8f;
+  --red: #f2665b;
+  --blue: #6aa9ff;
+  --mute: #a3abb8;
+  --track: #2b313b;
+  --gbg: rgba(76, 203, 143, 0.12);
+  --rbg: rgba(242, 102, 91, 0.1);
+  --abg: rgba(245, 184, 61, 0.1);
+  --nbg: rgba(125, 135, 149, 0.12);
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  --pop: 0 24px 64px rgba(0, 0, 0, 0.55);
+  --overlay: rgba(5, 6, 8, 0.62);
+  --errrow: rgba(242, 102, 91, 0.07);
+  --errfg: #ffb4ad;
+  --warnfg: #f3d596;
+  --info: #3d5f9e;
+  --wire: #3d4654;
+  --seg: #2b313b;
+  --segsh: none;
+  --segtrack: #0f1216;
+  --navon: #191d23;
+  --tag-l: 0.8;
+  --lane: rgba(19, 22, 27, 0.75);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg0: #0d0f12;
+    --bg1: #13161b;
+    --bg2: #191d23;
+    --bg3: #20252d;
+    --bgc: #0f1216;
+    --dot: #232831;
+    --line: #262b34;
+    --line2: #333a45;
+    --line3: #4a5361;
+    --row: #1d2128;
+    --text: #e9ecf1;
+    --text2: #a3abb8;
+    --text3: #7d8795;
+    --code: #c9cfd8;
+    --ai: #f5b83d;
+    --green: #4ccb8f;
+    --red: #f2665b;
+    --blue: #6aa9ff;
+    --mute: #a3abb8;
+    --track: #2b313b;
+    --gbg: rgba(76, 203, 143, 0.12);
+    --rbg: rgba(242, 102, 91, 0.1);
+    --abg: rgba(245, 184, 61, 0.1);
+    --nbg: rgba(125, 135, 149, 0.12);
+    --shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    --pop: 0 24px 64px rgba(0, 0, 0, 0.55);
+    --overlay: rgba(5, 6, 8, 0.62);
+    --errrow: rgba(242, 102, 91, 0.07);
+    --errfg: #ffb4ad;
+    --warnfg: #f3d596;
+    --info: #3d5f9e;
+    --wire: #3d4654;
+    --seg: #2b313b;
+    --segsh: none;
+    --segtrack: #0f1216;
+    --navon: #191d23;
+    --tag-l: 0.8;
+    --lane: rgba(19, 22, 27, 0.75);
+  }
+}
+
+/*
+ * Map tokens into Tailwind's theme so utilities (bg-surface, text-fg,
+ * border-line, …) resolve the vars at use-site and flip with the theme.
+ * `inline` keeps the var() reference rather than snapshotting the value.
+ */
+@theme inline {
+  --color-app: var(--bg0);
+  --color-surface: var(--bg1);
+  --color-raised: var(--bg2);
+  --color-sunken: var(--bg3);
+  --color-codebg: var(--bgc);
+  --color-row: var(--row);
+  --color-dot: var(--dot);
+
+  --color-fg: var(--text);
+  --color-muted: var(--text2);
+  --color-faint: var(--text3);
+  --color-codefg: var(--code);
+
+  --color-line: var(--line);
+  --color-line2: var(--line2);
+  --color-line3: var(--line3);
+  --color-wire: var(--wire);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-h);
+  --color-ai: var(--ai);
+  --color-ok: var(--green);
+  --color-danger: var(--red);
+  --color-link: var(--blue);
+  --color-warn: var(--warnfg);
+  --color-errfg: var(--errfg);
+  --color-info: var(--info);
+
+  --font-sans:
+    'Geist', 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+  body {
+    margin: 0;
+    background: var(--bg0);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Respect reduced-motion globally; components opt back in sparingly. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
 }
