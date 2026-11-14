@@ -90,3 +90,24 @@ retained stats/metrics history. Those drive the gaps below.
 - "Filter deploys by service" (maps through `service.repo`).
 - Hosts screen derivation from `ServiceInfo.host` (no host endpoint).
 - Project grouping from `repo`/`environment`.
+
+## Build status (final)
+
+| Screen / feature | Built | Data |
+| --- | --- | --- |
+| Overview | ✅ | real (`/api/services` + WS) |
+| Service detail (logs, stats, status, actions, env, deploy) | ✅ | real (WS + `/api/services/:id`) |
+| Hosts | ✅ | derived from `ServiceInfo.host` |
+| Project | ✅ | derived from `repo`/`environment` |
+| Deploys | ✅ | real (`/api/deploys`) |
+| Activity / Audit | ✅ | real (`/api/audit`, read-only) |
+| Durable log search | ✅ | real (`/logs/search`, gated by `me.logSearch`) |
+| Settings | ✅ | real (`/api/me`, read-only) |
+| Sign in | ✅ | real (`/auth/login` + token fallback) |
+| Transmitter (signals/channels/routes/sources/delivery) | ✅ | **mock adapter** + contract (`TRANSMITTER-API.md`) |
+| Global states (stale, actions-disabled, no-env, permission-denied) | ✅ | real |
+| Command palette, connect-agent drawer | ✅ | real / static |
+
+All screens have loading, empty and error states. The only screen not on real
+data is the Transmitter, by design — no backend exists yet, so it runs on the
+clearly-separated mock and shows a preview banner.

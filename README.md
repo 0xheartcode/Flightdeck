@@ -85,6 +85,31 @@ docker/            Dockerfiles + compose
 docs/              architecture and security notes
 ```
 
+## Web UI
+
+The React UI (`apps/web`) is built from the Claude design in
+[`docs/design/`](docs/design/) and ships light and dark themes. It is organised
+as a routed shell (sidebar + command palette + global status banners) over these
+screens:
+
+- **Overview** — every tracked service with status, host and repo.
+- **Service detail** — live logs, CPU/memory, status, and gated restart /
+  redeploy / environment editing.
+- **Hosts** and **Project** — services grouped by host and by repo/environment.
+- **Deploys** — the cross-service GitHub Actions timeline (`/api/deploys`).
+- **Activity** — the read-only operator audit trail (`/api/audit`).
+- **Transmitter** — a notifications hub (sources → routes → channels: Telegram,
+  email, Discord, Slack, webhooks) with an in-app signal feed and delivery log.
+  No backend ships yet; the UI runs on a mock adapter behind the contract in
+  [`docs/design/TRANSMITTER-API.md`](docs/design/TRANSMITTER-API.md) and shows a
+  "preview" banner until a real backend is wired in.
+- **Settings** — read-only identity, roles and server feature flags.
+
+Controls reflect the server-enforced permission model (`view` / `act` /
+`reveal`) and the `FD_ENABLE_ACTIONS` switch: ungranted or disabled actions are
+shown disabled with a reason, never as silent no-ops. The design-to-API mapping
+for every screen is tracked in [`docs/design/COVERAGE.md`](docs/design/COVERAGE.md).
+
 ## The gate
 
 One command runs the whole quality gate across both stacks, and CI runs exactly it. Commit only when it is green.
