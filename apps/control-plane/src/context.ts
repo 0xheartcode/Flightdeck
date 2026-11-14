@@ -7,6 +7,8 @@ import type { KeyResolver } from './identity.js';
 import type { LokiClient } from './loki.js';
 import type { Metrics } from './metrics.js';
 import type { Store } from './store.js';
+import type { TransmitterService } from './transmitter/service.js';
+import type { TransmitterStore } from './transmitter/store.js';
 
 /** Shared services wired once at startup and passed to the connection hubs. */
 export interface Context {
@@ -22,4 +24,6 @@ export interface Context {
   loki?: LokiClient;
   /** Inter-instance fan-out bus for HA (no-op when single-instance). */
   bus: Bus;
+  /** The Transmitter notifications hub (store + dispatcher), when enabled. */
+  transmitter?: { store: TransmitterStore; service: TransmitterService };
 }
