@@ -111,6 +111,19 @@ Appended after each milestone: what shipped, the commits, and open gaps.
 - Verified live: seeded channels + signals + mute via the API and confirmed the
   UI (Today grouping, muted-until banner, disabled-channel status) in dark theme.
 
+## Design-fidelity remnants (gli #21)
+
+- Signals tab gains **severity + source filters** and a "No signals match these
+  filters." state; each signal shows its source name.
+- Channel delivery status shows **"Sending test…"** while a test is in flight.
+- Route editor severity uses the design labels (Any severity / Warning and above
+  / Error and above / Critical only); route summary shows "every event".
+- Service detail logs get a **Live tail / History** segmented toggle (when log
+  search is configured), matching the design.
+- Verified live: the Signals filters, grouping and source names render correctly
+  (light theme). Overview stays a table (the design's cards rely on host/service
+  metadata the API doesn't expose — no fake data).
+
 ## Open / unverified
 
 - Real infrastructure actions (restart/redeploy/set_env) were **not** triggered

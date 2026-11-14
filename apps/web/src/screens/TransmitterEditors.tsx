@@ -4,7 +4,6 @@ import { relativeTime } from '@/lib/format';
 import {
   CHANNEL_KINDS,
   CHANNEL_META,
-  SEVERITIES,
   type Channel,
   type ChannelInput,
   type ChannelKind,
@@ -220,7 +219,12 @@ export function RouteEditor({
               id={id}
               value={minSeverity}
               onChange={(e) => setMinSeverity(e.target.value as Severity)}
-              options={SEVERITIES.map((s) => ({ value: s, label: s }))}
+              options={[
+                { value: 'info', label: 'Any severity' },
+                { value: 'warning', label: 'Warning and above' },
+                { value: 'error', label: 'Error and above' },
+                { value: 'critical', label: 'Critical only' },
+              ]}
             />
           )}
         </Field>
