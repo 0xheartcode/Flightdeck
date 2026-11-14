@@ -203,9 +203,12 @@ export const CHANNEL_META: Record<
     configFields: [{ key: 'url', label: 'Endpoint URL', placeholder: 'https://example.com/hook' }],
   },
   custom: {
-    label: 'Custom',
+    label: 'Custom connector',
     icon: 'puzzle-piece',
-    credentialLabel: 'Secret',
-    configFields: [{ key: 'url', label: 'Endpoint URL', placeholder: 'https://example.com/hook' }],
+    credentialLabel: 'Auth header value',
+    configFields: [
+      { key: 'url', label: 'Endpoint URL', placeholder: 'https://example.com/hook' },
+      { key: 'authHeader', label: 'Auth header name', placeholder: 'Authorization' },
+    ],
   },
 };

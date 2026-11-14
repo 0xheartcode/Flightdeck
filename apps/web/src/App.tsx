@@ -31,10 +31,10 @@ export function App() {
   const services = servicesQ.data ?? [];
   const connection = useConnectionStatus(servicesQ.dataUpdatedAt, servicesQ.isError);
 
-  // Unread signals drive the Transmitter nav badge. The mock is safe to poll.
+  // Unread signals drive the Transmitter nav badge.
   const unreadQ = useQuery({
     queryKey: ['tx', 'signals'],
-    queryFn: () => getTransmitter().listSignals(),
+    queryFn: () => getTransmitter(Boolean(meQ.data?.transmitter)).listSignals(),
     select: (sigs) => sigs.filter((s) => !s.read).length,
   });
 
@@ -127,7 +127,7 @@ function RouteView({
     case 'activity':
       return <Activity onNavigate={onNavigate} />;
     case 'transmitter':
-      return <Transmitter />;
+      return <Transmitter backendAvailable={Boolean(me?.transmitter)} />;
     case 'hosts':
       return <Hosts services={services} loading={loading} error={error} onNavigate={onNavigate} />;
     case 'settings':

@@ -23,6 +23,11 @@ export interface Me {
    * optional and treated as enabled when absent.
    */
   actionsEnabled?: boolean;
+  /**
+   * True when the Transmitter backend is available, so the UI uses the real
+   * client instead of the mock preview. Absent on older control planes.
+   */
+  transmitter?: boolean;
 }
 
 /** One line returned by the durable log search endpoint, newest-last. */
@@ -96,6 +101,29 @@ export function clearToken(): void {
 function authHeaders(): HeadersInit {
   const token = getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Authenticated fetch against the control plane. Applies the base URL, the
+ * bearer token and credentialed cookies, parses JSON, and throws ApiError on a
+ * non-2xx response. Returns undefined for 204/empty bodies.
+ */
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(init.body ? { 'content-type': 'application/json' } : {}),
+      ...authHeaders(),
+      ...init.headers,
+    },
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `${init.method ?? 'GET'} ${path} failed: ${res.status}`);
+  }
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /**

@@ -30,8 +30,8 @@ const REQUIRED: Record<PermAction, Exclude<Perm, 'view'>> = {
 };
 
 const REASON: Record<Exclude<Perm, 'view'>, string> = {
-  act: 'Requires the operator role',
-  reveal: 'Requires the admin role',
+  act: 'Needs the operator role',
+  reveal: 'Needs the admin role',
 };
 
 /**

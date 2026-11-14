@@ -12,8 +12,14 @@ import {
   type Tone,
 } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
-import { getTransmitter, transmitterIsMock } from '@/lib/transmitter/client';
-import { CHANNEL_META, type Channel, type RouteRule, type Severity } from '@/lib/transmitter/types';
+import { getTransmitter } from '@/lib/transmitter/client';
+import {
+  CHANNEL_META,
+  type Channel,
+  type RouteRule,
+  type Severity,
+  type TransmitterClient,
+} from '@/lib/transmitter/types';
 import { Page, PageHeader } from './parts';
 import { ChannelEditor, OneTimeTokenModal, RouteEditor } from './TransmitterEditors';
 
@@ -24,15 +30,20 @@ const SEVERITY_TONE: Record<Severity, Tone> = {
   critical: 'danger',
 };
 
-const tx = () => getTransmitter();
+export interface TransmitterProps {
+  /** True when the real backend is available; false shows the mock preview. */
+  backendAvailable: boolean;
+}
 
-export function Transmitter() {
+export function Transmitter({ backendAvailable }: TransmitterProps) {
+  const client = getTransmitter(backendAvailable);
   const [tab, setTab] = useState('signals');
+  // Design order: signals -> sources -> routes -> channels, then the delivery log.
   const tabs = [
     { id: 'signals', label: 'Signals' },
-    { id: 'channels', label: 'Channels' },
-    { id: 'routes', label: 'Routes' },
     { id: 'sources', label: 'Sources' },
+    { id: 'routes', label: 'Routes' },
+    { id: 'channels', label: 'Channels' },
     { id: 'deliveries', label: 'Delivery log' },
   ];
 
@@ -42,7 +53,7 @@ export function Transmitter() {
         title="Transmitter"
         subtitle="Route Flightdeck and inbound events to the channels your team watches."
       />
-      {transmitterIsMock ? (
+      {!backendAvailable ? (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-line bg-[var(--abg)] px-3 py-2 text-xs text-warn">
           <Icon name="flask" size={14} className="shrink-0" />
           Preview: no Transmitter backend is configured, so this shows mock data. Nothing is sent.
@@ -50,26 +61,24 @@ export function Transmitter() {
       ) : null}
       <Tabs tabs={tabs} active={tab} onChange={setTab} label="Transmitter sections" />
       <div className="mt-4">
-        {tab === 'signals' ? <SignalsTab /> : null}
-        {tab === 'channels' ? <ChannelsTab /> : null}
-        {tab === 'routes' ? <RoutesTab /> : null}
-        {tab === 'sources' ? <SourcesTab /> : null}
-        {tab === 'deliveries' ? <DeliveriesTab /> : null}
+        {tab === 'signals' ? <SignalsTab client={client} /> : null}
+        {tab === 'sources' ? <SourcesTab client={client} /> : null}
+        {tab === 'routes' ? <RoutesTab client={client} /> : null}
+        {tab === 'channels' ? <ChannelsTab client={client} /> : null}
+        {tab === 'deliveries' ? <DeliveriesTab client={client} /> : null}
       </div>
     </Page>
   );
 }
 
-function SignalsTab() {
+function SignalsTab({ client }: { client: TransmitterClient }) {
   const qc = useQueryClient();
-  const signals = useQuery({ queryKey: ['tx', 'signals'], queryFn: () => tx().listSignals() });
-  const markAll = useMutation({
-    mutationFn: () => tx().markAllRead(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tx', 'signals'] }),
-  });
+  const signals = useQuery({ queryKey: ['tx', 'signals'], queryFn: () => client.listSignals() });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['tx', 'signals'] });
+  const markAll = useMutation({ mutationFn: () => client.markAllRead(), onSuccess: invalidate });
   const markOne = useMutation({
-    mutationFn: (id: string) => tx().markRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tx', 'signals'] }),
+    mutationFn: (id: string) => client.markRead(id),
+    onSuccess: invalidate,
   });
 
   const rows = signals.data ?? [];
@@ -128,10 +137,10 @@ function SignalsTab() {
   );
 }
 
-function ChannelsTab() {
+function ChannelsTab({ client }: { client: TransmitterClient }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const channels = useQuery({ queryKey: ['tx', 'channels'], queryFn: () => tx().listChannels() });
+  const channels = useQuery({ queryKey: ['tx', 'channels'], queryFn: () => client.listChannels() });
   const [editing, setEditing] = useState<Channel | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Channel | null>(null);
@@ -141,17 +150,18 @@ function ChannelsTab() {
   const saveMut = useMutation({
     mutationFn: (vars: {
       id?: string;
-      input: Parameters<ReturnType<typeof tx>['createChannel']>[0];
-    }) => (vars.id ? tx().updateChannel(vars.id, vars.input) : tx().createChannel(vars.input)),
+      input: Parameters<TransmitterClient['createChannel']>[0];
+    }) => (vars.id ? client.updateChannel(vars.id, vars.input) : client.createChannel(vars.input)),
     onSuccess: () => {
       invalidate();
       setEditing(null);
       setCreating(false);
       toast.success('Channel saved');
     },
+    onError: () => toast.error('Could not save the channel'),
   });
   const delMut = useMutation({
-    mutationFn: (id: string) => tx().deleteChannel(id),
+    mutationFn: (id: string) => client.deleteChannel(id),
     onSuccess: () => {
       invalidate();
       setDeleting(null);
@@ -159,7 +169,7 @@ function ChannelsTab() {
     },
   });
   const testMut = useMutation({
-    mutationFn: (id: string) => tx().testChannel(id),
+    mutationFn: (id: string) => client.testChannel(id),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ['tx', 'deliveries'] });
       if (d.ok) toast.success(`Test sent to ${d.channelName}`);
@@ -175,7 +185,7 @@ function ChannelsTab() {
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <div className="text-sm font-medium text-fg">{rows.length} channels</div>
           <Button size="sm" icon="plus" variant="primary" onClick={() => setCreating(true)}>
-            New channel
+            Add channel
           </Button>
         </div>
         {rows.length === 0 ? (
@@ -208,7 +218,7 @@ function ChannelsTab() {
                   disabled={testMut.isPending}
                   onClick={() => testMut.mutate(c.id)}
                 >
-                  Test
+                  Send test
                 </Button>
                 <Button
                   size="sm"
@@ -265,21 +275,19 @@ function ChannelsTab() {
   );
 }
 
-function RoutesTab() {
+function RoutesTab({ client }: { client: TransmitterClient }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const routes = useQuery({ queryKey: ['tx', 'routes'], queryFn: () => tx().listRoutes() });
-  const channels = useQuery({ queryKey: ['tx', 'channels'], queryFn: () => tx().listChannels() });
+  const routes = useQuery({ queryKey: ['tx', 'routes'], queryFn: () => client.listRoutes() });
+  const channels = useQuery({ queryKey: ['tx', 'channels'], queryFn: () => client.listChannels() });
   const [editing, setEditing] = useState<RouteRule | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<RouteRule | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tx', 'routes'] });
   const saveMut = useMutation({
-    mutationFn: (vars: {
-      id?: string;
-      input: Parameters<ReturnType<typeof tx>['createRoute']>[0];
-    }) => (vars.id ? tx().updateRoute(vars.id, vars.input) : tx().createRoute(vars.input)),
+    mutationFn: (vars: { id?: string; input: Parameters<TransmitterClient['createRoute']>[0] }) =>
+      vars.id ? client.updateRoute(vars.id, vars.input) : client.createRoute(vars.input),
     onSuccess: () => {
       invalidate();
       setEditing(null);
@@ -288,15 +296,15 @@ function RoutesTab() {
     },
   });
   const delMut = useMutation({
-    mutationFn: (id: string) => tx().deleteRoute(id),
+    mutationFn: (id: string) => client.deleteRoute(id),
     onSuccess: () => {
       invalidate();
       setDeleting(null);
     },
   });
   const muteMut = useMutation({
-    mutationFn: (r: RouteRule) => tx().updateRoute(r.id, { ...r, muted: !r.muted }),
-    onSuccess: () => invalidate(),
+    mutationFn: (r: RouteRule) => client.updateRoute(r.id, { ...r, muted: !r.muted }),
+    onSuccess: invalidate,
   });
 
   const rows = routes.data ?? [];
@@ -309,7 +317,7 @@ function RoutesTab() {
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <div className="text-sm font-medium text-fg">{rows.length} routes</div>
           <Button size="sm" icon="plus" variant="primary" onClick={() => setCreating(true)}>
-            New route
+            Create route
           </Button>
         </div>
         {rows.length === 0 ? (
@@ -407,17 +415,17 @@ function RoutesTab() {
   );
 }
 
-function SourcesTab() {
+function SourcesTab({ client }: { client: TransmitterClient }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const sources = useQuery({ queryKey: ['tx', 'sources'], queryFn: () => tx().listSources() });
+  const sources = useQuery({ queryKey: ['tx', 'sources'], queryFn: () => client.listSources() });
   const [newName, setNewName] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tx', 'sources'] });
   const createMut = useMutation({
-    mutationFn: (name: string) => tx().createSource({ name }),
+    mutationFn: (name: string) => client.createSource({ name }),
     onSuccess: (secret) => {
       invalidate();
       setNewName('');
@@ -425,14 +433,14 @@ function SourcesTab() {
     },
   });
   const rotateMut = useMutation({
-    mutationFn: (id: string) => tx().rotateToken(id),
+    mutationFn: (id: string) => client.rotateToken(id),
     onSuccess: (secret) => {
       invalidate();
       setToken(secret.token);
     },
   });
   const revokeMut = useMutation({
-    mutationFn: (id: string) => tx().revokeSource(id),
+    mutationFn: (id: string) => client.revokeSource(id),
     onSuccess: () => {
       invalidate();
       setRevoking(null);
@@ -536,10 +544,10 @@ function SourcesTab() {
   );
 }
 
-function DeliveriesTab() {
+function DeliveriesTab({ client }: { client: TransmitterClient }) {
   const deliveries = useQuery({
     queryKey: ['tx', 'deliveries'],
-    queryFn: () => tx().listDeliveries(),
+    queryFn: () => client.listDeliveries(),
   });
   const rows = deliveries.data ?? [];
   return (
