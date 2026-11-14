@@ -1,10 +1,17 @@
 # Transmitter API contract
 
-The backend contract for the Transmitter (notifications hub). The web UI is built
-against the typed client in `apps/web/src/lib/transmitter/types.ts`
-(`TransmitterClient`) with an in-memory mock adapter used only in dev and tests.
-This document is what a server implementation must satisfy so the real adapter
-can replace the mock with no UI change.
+The backend contract for the Transmitter (notifications hub).
+
+**Status: implemented.** The control plane lives in this repo, so the backend is
+built under `apps/control-plane/src/transmitter/` (store + dispatcher + senders +
+SSRF guard + routes) and `/api/me` reports `transmitter: true` when it is on
+(`FD_TRANSMITTER`, default on; `FD_TRANSMITTER_DB_FILE` to persist, else
+in-memory). The web UI uses the real HTTP client
+(`apps/web/src/lib/transmitter/httpAdapter.ts`) when the backend is present and
+falls back to the in-memory mock (with a visible "preview" banner) otherwise. The
+mock is also what the UI tests import.
+
+This document remains the source of truth for the wire shapes.
 
 Model: **sources in → routes → channels out.**
 
@@ -78,7 +85,7 @@ list is empty). The dispatcher enforces `throttlePerMin`, suppresses during
 | POST | `/sources` | body `{ name }`; returns `{ source, token }` **once** |
 | POST | `/sources/:id/rotate` | returns `{ source, token }` **once** |
 | DELETE | `/sources/:id` | revoke (builtin source cannot be revoked) |
-| POST | `/ingest/:sourceId` | inbound webhook; authenticated by the source token |
+| POST | `/transmitter/ingest/:sourceId` | inbound webhook; **outside `/api`** (like the GitHub webhook), authenticated by the source token |
 
 `Source { id, kind: 'builtin'|'webhook', name, enabled, tokenHint?, createdAt }`
 
@@ -107,6 +114,11 @@ size-capped (e.g. 64 KiB) and schema-validated before it becomes a signal.
   backoff; failures are recorded as a `Delivery` with `ok: false` and the error.
 - **No secret logging:** credentials and inbound tokens never appear in logs,
   deliveries or audit entries.
+- **Senders:** Telegram (fixed API host) and the webhook family (Discord, Slack,
+  generic webhook, custom connector) are implemented over HTTPS POST. **Email
+  (SMTP) is not implemented in this build** — the channel kind exists and a test
+  returns a clear "SMTP sender is not implemented" delivery error; wiring an SMTP
+  library is the one remaining sender.
 
 ## Permissions
 

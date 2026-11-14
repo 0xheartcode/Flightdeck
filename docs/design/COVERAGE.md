@@ -104,10 +104,11 @@ retained stats/metrics history. Those drive the gaps below.
 | Durable log search | ✅ | real (`/logs/search`, gated by `me.logSearch`) |
 | Settings | ✅ | real (`/api/me`, read-only) |
 | Sign in | ✅ | real (`/auth/login` + token fallback) |
-| Transmitter (signals/channels/routes/sources/delivery) | ✅ | **mock adapter** + contract (`TRANSMITTER-API.md`) |
+| Transmitter (signals/channels/routes/sources/delivery) | ✅ | **real backend** (control-plane) + mock fallback for preview/tests |
 | Global states (stale, actions-disabled, no-env, permission-denied) | ✅ | real |
 | Command palette, connect-agent drawer | ✅ | real / static |
 
-All screens have loading, empty and error states. The only screen not on real
-data is the Transmitter, by design — no backend exists yet, so it runs on the
-clearly-separated mock and shows a preview banner.
+All screens have loading, empty and error states, and every screen — including
+the Transmitter — runs on a real backend. The Transmitter falls back to the
+clearly-separated mock (with a preview banner) only when the backend is disabled
+(`FD_TRANSMITTER=false`).

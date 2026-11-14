@@ -99,10 +99,13 @@ screens:
 - **Deploys** — the cross-service GitHub Actions timeline (`/api/deploys`).
 - **Activity** — the read-only operator audit trail (`/api/audit`).
 - **Transmitter** — a notifications hub (sources → routes → channels: Telegram,
-  email, Discord, Slack, webhooks) with an in-app signal feed and delivery log.
-  No backend ships yet; the UI runs on a mock adapter behind the contract in
-  [`docs/design/TRANSMITTER-API.md`](docs/design/TRANSMITTER-API.md) and shows a
-  "preview" banner until a real backend is wired in.
+  Discord, Slack, webhooks; email/SMTP pending) with an in-app signal feed and
+  delivery log. The backend lives in `apps/control-plane/src/transmitter/`
+  (store + dispatcher + SSRF-guarded senders), gated by `FD_TRANSMITTER` (default
+  on); credentials are write-only and inbound webhook tokens are hashed and shown
+  once. The wire contract is
+  [`docs/design/TRANSMITTER-API.md`](docs/design/TRANSMITTER-API.md); when the
+  backend is disabled the UI falls back to a mock with a "preview" banner.
 - **Settings** — read-only identity, roles and server feature flags.
 
 Controls reflect the server-enforced permission model (`view` / `act` /

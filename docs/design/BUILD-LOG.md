@@ -73,12 +73,33 @@ Appended after each milestone: what shipped, the commits, and open gaps.
   labelled or hidden; reduced-motion respected globally.
 - Gate: full TS workspace gate (`pnpm check`) green; Rust untouched.
 
+## Transmitter backend (control-plane)
+
+- Built the real Transmitter backend in `apps/control-plane/src/transmitter/`:
+  zod wire types, a SQLite store (credentials write-only; inbound tokens SHA-256
+  hashed + shown once), an SSRF guard (blocks metadata/loopback/link-local/private
+  ranges, incl. DNS-resolved), senders (Telegram + webhook family over HTTPS;
+  Email/SMTP deferred), and a dispatcher (route matching, throttle, quiet hours,
+  mute, retries + backoff, delivery recording, audit).
+- API mounted at `/api/transmitter/*` (reads need an authed caller, writes need
+  `act`) plus inbound `/transmitter/ingest/:sourceId` outside `/api`
+  (source-token auth, rate-limited, size-capped). `/api/me` reports
+  `transmitter: true`; the web client switches from mock to the real HTTP adapter.
+- Gated by `FD_TRANSMITTER` (default on), `FD_TRANSMITTER_DB_FILE` to persist.
+- Tests: store (credential-hiding, token hash/rotate), SSRF, dispatcher (matching,
+  throttle, quiet hours, retries — mock sink, no real sends), and HTTP routes
+  (credential-hiding, ingest token auth). **135 control-plane tests** total.
+- Verified live: booted the control plane, created a channel (secret never
+  returned), issued a one-time source token, and ingested a signal (401 on a bad
+  token, 202 on the real one); the UI rendered the real channel with no preview
+  banner.
+
 ## Open / unverified
 
 - Real infrastructure actions (restart/redeploy/set_env) were **not** triggered
   against live services per the safety rules — verified only through the UI gate,
   confirm dialog, and the WS send path.
-- The Transmitter has no backend; the UI runs on the mock. Implement
-  `TRANSMITTER-API.md` to go live.
+- Email/SMTP sender not implemented (returns a clear error); every other sender
+  is. No real notifications were sent in testing (mock sinks / no matching route).
 - Interaction tests use static render assertions (no jsdom); a jsdom + Testing
   Library setup would add real keyboard/focus tests (see DECISIONS.md).

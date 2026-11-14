@@ -30,7 +30,15 @@ autonomous UI build makes choices the brief left open.
 - **Hosts and Project screens are derived from `ServiceInfo`** (`host`, `repo`,
   `environment`); there is no host or project entity in the API. How to change:
   add host/project endpoints and swap the derivation for real data.
-- **Transmitter is built on a typed client + mock adapter**, because no
-  Transmitter backend exists in this repo. The contract lives in
-  `TRANSMITTER-API.md`. How to change: implement that contract server-side and
-  point the client at the real adapter.
+- **Transmitter backend is implemented in the control plane** (the control plane
+  lives in this repo, so per the brief's M5 rule the real API + dispatcher are
+  built, not just a mock). Storage is SQLite (in-memory by default,
+  `FD_TRANSMITTER_DB_FILE` to persist); credentials are write-only; inbound
+  tokens are SHA-256 hashed and shown once; outbound webhooks are SSRF-guarded.
+  The UI uses the HTTP client when `me.transmitter` is true and the mock (with a
+  preview banner) otherwise. The typed client + mock remain for dev/tests. How to
+  change: the contract is `TRANSMITTER-API.md`.
+- **Email/SMTP sender is deferred.** Every sender is implemented except Email,
+  which would need an SMTP library; the channel kind exists and returns a clear
+  "not implemented" error on send/test. How to change: add an SMTP sender in
+  `transmitter/senders.ts`.
