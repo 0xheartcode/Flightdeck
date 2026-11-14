@@ -7,10 +7,12 @@ import {
   ConfirmDialog,
   EmptyState,
   Icon,
+  Select,
   Tabs,
   useToast,
   type Tone,
 } from '@/components/ui';
+import { SEVERITIES } from '@/lib/transmitter/types';
 import { relativeTime } from '@/lib/format';
 import { getTransmitter } from '@/lib/transmitter/client';
 import {
@@ -170,6 +172,7 @@ function MuteControl({ client }: { client: TransmitterClient }) {
 function SignalsTab({ client }: { client: TransmitterClient }) {
   const qc = useQueryClient();
   const signals = useQuery({ queryKey: ['tx', 'signals'], queryFn: () => client.listSignals() });
+  const sources = useQuery({ queryKey: ['tx', 'sources'], queryFn: () => client.listSources() });
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tx', 'signals'] });
   const markAll = useMutation({ mutationFn: () => client.markAllRead(), onSuccess: invalidate });
   const markOne = useMutation({
@@ -177,10 +180,22 @@ function SignalsTab({ client }: { client: TransmitterClient }) {
     onSuccess: invalidate,
   });
 
-  const rows = signals.data ?? [];
-  const unread = rows.filter((s) => !s.read).length;
+  const [sevFilter, setSevFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
 
-  // Group newest-first signals into Today / Earlier, matching the design.
+  const all = signals.data ?? [];
+  const unread = all.filter((s) => !s.read).length;
+  const sourceName = (id: string) => sources.data?.find((s) => s.id === id)?.name ?? id;
+
+  // Filter by severity and source, then group newest-first into Today / Earlier.
+  const rows = useMemo(
+    () =>
+      all.filter(
+        (s) =>
+          (!sevFilter || s.severity === sevFilter) && (!sourceFilter || s.source === sourceFilter),
+      ),
+    [all, sevFilter, sourceFilter],
+  );
   const groups = useMemo(() => {
     const today = new Date().toDateString();
     return [
@@ -197,7 +212,9 @@ function SignalsTab({ client }: { client: TransmitterClient }) {
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-fg">{s.title}</div>
         {s.body ? <div className="text-xs text-muted">{s.body}</div> : null}
-        <div className="mt-0.5 text-xs text-faint">{relativeTime(s.ts)}</div>
+        <div className="mt-0.5 text-xs text-faint">
+          {relativeTime(s.ts)} · {sourceName(s.source)}
+        </div>
       </div>
       {!s.read ? (
         <button
@@ -211,27 +228,51 @@ function SignalsTab({ client }: { client: TransmitterClient }) {
     </li>
   );
 
+  const sourceOptions = [
+    { value: '', label: 'All sources' },
+    ...(sources.data ?? []).map((s) => ({ value: s.id, label: s.name })),
+  ];
+
   return (
     <Card>
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="text-sm font-medium text-fg">
-          {unread} unread{rows.length ? ` of ${rows.length}` : ''}
+          {unread} unread{all.length ? ` of ${all.length}` : ''}
         </div>
-        <Button
-          size="sm"
-          icon="checks"
-          disabled={unread === 0 || markAll.isPending}
-          onClick={() => markAll.mutate()}
-        >
-          Mark all read
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            aria-label="Filter by severity"
+            value={sevFilter}
+            onChange={(e) => setSevFilter(e.target.value)}
+            options={[
+              { value: '', label: 'Any severity' },
+              ...SEVERITIES.map((s) => ({ value: s, label: s })),
+            ]}
+          />
+          <Select
+            aria-label="Filter by source"
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            options={sourceOptions}
+          />
+          <Button
+            size="sm"
+            icon="checks"
+            disabled={unread === 0 || markAll.isPending}
+            onClick={() => markAll.mutate()}
+          >
+            Mark all read
+          </Button>
+        </div>
       </div>
-      {rows.length === 0 ? (
+      {all.length === 0 ? (
         <EmptyState
           icon="bell"
           title="No signals"
           description="Incoming notifications will appear here."
         />
+      ) : rows.length === 0 ? (
+        <EmptyState icon="magnifying-glass" title="No signals match these filters." />
       ) : (
         groups.map((g) => (
           <section key={g.label}>
@@ -249,11 +290,19 @@ function SignalsTab({ client }: { client: TransmitterClient }) {
 /** Per-channel delivery status line, as in the design. */
 function ChannelDeliveryStatus({
   enabled,
+  testing,
   last,
 }: {
   enabled: boolean;
+  testing?: boolean;
   last?: { ok: boolean; ts: number };
 }) {
+  if (testing)
+    return (
+      <span className="flex items-center gap-1 text-[var(--ai)]">
+        <Icon name="circle-notch" size={12} className="motion-safe:animate-spin" /> Sending test…
+      </span>
+    );
   if (!enabled) return <span className="text-faint">Disabled</span>;
   if (!last) return null;
   return last.ok ? (
@@ -354,7 +403,11 @@ function ChannelsTab({ client }: { client: TransmitterClient }) {
                         ? `Credential set${c.credentialUpdatedAt ? `, updated ${relativeTime(c.credentialUpdatedAt)}` : ''}`
                         : 'No credential'}
                     </span>
-                    <ChannelDeliveryStatus enabled={c.enabled} last={lastByChannel.get(c.id)} />
+                    <ChannelDeliveryStatus
+                      enabled={c.enabled}
+                      testing={testMut.isPending && testMut.variables === c.id}
+                      last={lastByChannel.get(c.id)}
+                    />
                   </div>
                 </div>
                 <Button
@@ -487,6 +540,10 @@ function RoutesTab({ client }: { client: TransmitterClient }) {
                   </div>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-faint">
                     <span>≥ {r.match.minSeverity}</span>
+                    <span>·</span>
+                    <span>
+                      {r.match.eventTypes.length ? r.match.eventTypes.join(', ') : 'every event'}
+                    </span>
                     <span>·</span>
                     <span>
                       {r.match.projects.length ? r.match.projects.join(', ') : 'any project'}
