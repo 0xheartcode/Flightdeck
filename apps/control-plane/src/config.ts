@@ -23,6 +23,10 @@ export interface Config {
   maxServices: number;
   /** Whether operator actions (restart) are allowed. Off by default. */
   actionsEnabled: boolean;
+  /** Whether the Transmitter notifications hub is enabled. On by default. */
+  transmitterEnabled: boolean;
+  /** SQLite file for the Transmitter store, or ':memory:' (default). */
+  transmitterDbFile: string;
   /** How long to wait for an agent to report a command result. */
   actionTimeoutMs: number;
   /** Max audit entries kept in memory (served at /api/audit). */
@@ -130,6 +134,8 @@ export function loadConfig(): Config {
     maxPayloadBytes: num(process.env.FD_MAX_PAYLOAD_BYTES, 262_144),
     maxServices: num(process.env.FD_MAX_SERVICES, 1000),
     actionsEnabled: process.env.FD_ENABLE_ACTIONS === 'true',
+    transmitterEnabled: process.env.FD_TRANSMITTER !== 'false',
+    transmitterDbFile: process.env.FD_TRANSMITTER_DB_FILE ?? ':memory:',
     actionTimeoutMs: num(process.env.FD_ACTION_TIMEOUT_MS, 20_000),
     auditMax: num(process.env.FD_AUDIT_MAX, 500),
     auditFile: process.env.FD_AUDIT_LOG_FILE ?? '',

@@ -15,6 +15,8 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     maxPayloadBytes: 262_144,
     maxServices: 100,
     actionsEnabled: true,
+    transmitterEnabled: false,
+    transmitterDbFile: ':memory:',
     actionTimeoutMs: 2000,
     auditMax: 50,
     auditFile: '',

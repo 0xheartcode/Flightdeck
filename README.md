@@ -85,6 +85,34 @@ docker/            Dockerfiles + compose
 docs/              architecture and security notes
 ```
 
+## Web UI
+
+The React UI (`apps/web`) is built from the Claude design in
+[`docs/design/`](docs/design/) and ships light and dark themes. It is organised
+as a routed shell (sidebar + command palette + global status banners) over these
+screens:
+
+- **Overview** — every tracked service with status, host and repo.
+- **Service detail** — live logs, CPU/memory, status, and gated restart /
+  redeploy / environment editing.
+- **Hosts** and **Project** — services grouped by host and by repo/environment.
+- **Deploys** — the cross-service GitHub Actions timeline (`/api/deploys`).
+- **Activity** — the read-only operator audit trail (`/api/audit`).
+- **Transmitter** — a notifications hub (sources → routes → channels: Telegram,
+  Discord, Slack, webhooks; email/SMTP pending) with an in-app signal feed and
+  delivery log. The backend lives in `apps/control-plane/src/transmitter/`
+  (store + dispatcher + SSRF-guarded senders), gated by `FD_TRANSMITTER` (default
+  on); credentials are write-only and inbound webhook tokens are hashed and shown
+  once. The wire contract is
+  [`docs/design/TRANSMITTER-API.md`](docs/design/TRANSMITTER-API.md); when the
+  backend is disabled the UI falls back to a mock with a "preview" banner.
+- **Settings** — read-only identity, roles and server feature flags.
+
+Controls reflect the server-enforced permission model (`view` / `act` /
+`reveal`) and the `FD_ENABLE_ACTIONS` switch: ungranted or disabled actions are
+shown disabled with a reason, never as silent no-ops. The design-to-API mapping
+for every screen is tracked in [`docs/design/COVERAGE.md`](docs/design/COVERAGE.md).
+
 ## The gate
 
 One command runs the whole quality gate across both stacks, and CI runs exactly it. Commit only when it is green.

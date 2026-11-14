@@ -16,5 +16,8 @@ export default defineConfig({
   // The e2e/ specs are Playwright, not vitest; run them with `just e2e`.
   test: {
     exclude: [...configDefaults.exclude, 'e2e/**'],
+    // jsdom so component tests can mount, click and assert on the real DOM.
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
   },
 });

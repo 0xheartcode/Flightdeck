@@ -18,6 +18,8 @@ import { createDeployStore } from './deploys.js';
 import { Metrics } from './metrics.js';
 import { Store } from './store.js';
 import { createHttpApp } from './http.js';
+import { TransmitterStore } from './transmitter/store.js';
+import { TransmitterService } from './transmitter/service.js';
 import { handleAgentConnection } from './agent-hub.js';
 import { handleClientConnection } from './client-hub.js';
 
@@ -52,16 +54,24 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   const bus = createBus(config);
   const commands = new CommandBus(config.actionTimeoutMs);
   commands.setBus(bus);
+  const audit = new AuditLog(config.auditMax, config.auditFile || undefined);
+  // The Transmitter notifications hub (store + dispatcher), when enabled.
+  let transmitterCtx: Context['transmitter'];
+  if (config.transmitterEnabled) {
+    const txStore = new TransmitterStore(config.transmitterDbFile);
+    transmitterCtx = { store: txStore, service: new TransmitterService(txStore, audit) };
+  }
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
     commands,
-    audit: new AuditLog(config.auditMax, config.auditFile || undefined),
+    audit,
     metrics: new Metrics(),
     deploys,
     jwks,
     loki,
     bus,
+    transmitter: transmitterCtx,
   };
 
   // Apply events from other instances to the local store (and thus to local
