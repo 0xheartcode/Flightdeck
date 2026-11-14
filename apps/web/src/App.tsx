@@ -1,106 +1,144 @@
-import { useState } from 'react';
-import { ApiError } from '@/api';
-import { useServices } from '@/hooks/useServices';
+import { useQuery } from '@tanstack/react-query';
+import type { ServiceInfo } from '@flightdeck/protocol';
+import { ApiError, type Me } from '@/api';
+import { Icon } from '@/components/ui';
+import { Shell } from '@/components/shell/Shell';
+import { useConnectionStatus } from '@/hooks/useConnectionStatus';
 import { useMe } from '@/hooks/useMe';
-import { useLogStream } from '@/hooks/useLogStream';
-import { ServiceList } from '@/components/ServiceList';
-import { LogViewer } from '@/components/LogViewer';
-import { EnvPanel } from '@/components/EnvPanel';
-import { TokenBar } from '@/components/TokenBar';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useServices } from '@/hooks/useServices';
+import { byHost, hostOnline, needsAttention } from '@/lib/services';
+import { useRoute, type Route } from '@/lib/router';
+import { getTransmitter } from '@/lib/transmitter/client';
+import { Activity } from '@/screens/Activity';
+import { Deploys } from '@/screens/Deploys';
+import { Hosts } from '@/screens/Hosts';
+import { Overview } from '@/screens/Overview';
+import { Project } from '@/screens/Project';
+import { ServiceDetail } from '@/screens/ServiceDetail';
+import { Settings } from '@/screens/Settings';
+import { SignIn } from '@/screens/SignIn';
+import { Transmitter } from '@/screens/Transmitter';
 
 const isUnauthorized = (err: unknown): boolean => err instanceof ApiError && err.status === 401;
 
 export function App() {
-  const { data: me, error: meError } = useMe();
-  const { data: services = [], isLoading, isError, error: servicesError } = useServices();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const {
-    logs,
-    connected,
-    stats,
-    status,
-    actionResult,
-    actionPending,
-    deploy,
-    sendAction,
-    sendSetEnv,
-  } = useLogStream(selectedId);
+  const meQ = useMe();
+  const servicesQ = useServices();
+  const perms = usePermissions();
+  const [route, go] = useRoute();
 
-  // A 401 means identity is on but we are not signed in (the /api/me 401 hides
-  // the identityEnabled flag until a valid token is supplied).
-  const unauthorized = isUnauthorized(meError) || isUnauthorized(servicesError);
-  const identityEnabled = me?.identityEnabled ?? unauthorized;
-  const authenticated = identityEnabled ? Boolean(me?.subject) : true;
-  const canAct = !identityEnabled || (me?.permissions.includes('act') ?? false);
-  const canEdit = !identityEnabled || (me?.permissions.includes('reveal') ?? false);
+  const services = servicesQ.data ?? [];
+  const connection = useConnectionStatus(servicesQ.dataUpdatedAt, servicesQ.isError);
 
-  const selected = services.find((s) => s.id === selectedId) ?? null;
+  // Unread signals drive the Transmitter nav badge. The mock is safe to poll.
+  const unreadQ = useQuery({
+    queryKey: ['tx', 'signals'],
+    queryFn: () => getTransmitter().listSignals(),
+    select: (sigs) => sigs.filter((s) => !s.read).length,
+  });
+
+  // While identity is unknown, avoid flashing the shell before the 401 resolves.
+  if (meQ.isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-app text-faint">
+        <Icon name="circle-notch" size={22} className="motion-safe:animate-spin" label="Loading" />
+      </div>
+    );
+  }
+
+  const unauthorized = isUnauthorized(meQ.error) || isUnauthorized(servicesQ.error);
+  const identityEnabled = meQ.data?.identityEnabled ?? unauthorized;
+  const authenticated = identityEnabled ? Boolean(meQ.data?.subject) : true;
+
+  if (identityEnabled && !authenticated) {
+    return <SignIn loginFlow={meQ.data?.loginFlow ?? false} />;
+  }
+
+  const attention = services.filter((s) => needsAttention(s.state)).length;
+  const hosts = byHost(services);
+  const onlineHosts = hosts.filter((h) => hostOnline(h.services)).length;
+  const badges: Partial<Record<string, string>> = {
+    overview: attention > 0 ? String(attention) : undefined,
+    transmitter: unreadQ.data ? String(unreadQ.data) : undefined,
+    hosts: hosts.length ? `${onlineHosts}/${hosts.length}` : undefined,
+  };
+
+  const onNavigate = (r: Route) => go(r);
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
-        <span className="text-lg font-semibold text-slate-100">Flightdeck</span>
-        <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs font-medium text-slate-400">
-          CD
-        </span>
-        <div className="ml-auto min-w-0">
-          <TokenBar
-            identityEnabled={identityEnabled}
-            authenticated={authenticated}
-            loginFlow={me?.loginFlow ?? false}
-            name={me?.name ?? me?.subject}
-          />
-        </div>
-      </header>
-
-      {/* Stacks on small screens (services on top, logs below), side by side from md up. */}
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="max-h-56 w-full shrink-0 overflow-auto border-b border-slate-800 md:max-h-none md:w-72 md:border-b-0 md:border-r">
-          {isLoading ? (
-            <p className="p-4 text-sm text-slate-500">Loading services...</p>
-          ) : isError ? (
-            <p className="p-4 text-sm text-rose-400">
-              {unauthorized ? 'Sign in to view services.' : 'Control plane unreachable.'}
-            </p>
-          ) : (
-            <ServiceList services={services} selectedId={selectedId} onSelect={setSelectedId} />
-          )}
-        </aside>
-
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {selected ? (
-            <>
-              <EnvPanel
-                serviceId={selected.id}
-                canEdit={canEdit}
-                onSave={sendSetEnv}
-                actionResult={actionResult}
-                actionPending={actionPending}
-              />
-              <div className="min-h-0 flex-1">
-                <LogViewer
-                  serviceId={selected.id}
-                  serviceName={selected.name}
-                  logs={logs}
-                  connected={connected}
-                  stats={stats}
-                  status={status}
-                  actionResult={actionResult}
-                  actionPending={actionPending}
-                  deploy={deploy}
-                  onAction={sendAction}
-                  canAct={canAct}
-                  searchEnabled={me?.logSearch ?? false}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-600">
-              Select a service to view its logs.
-            </div>
-          )}
-        </main>
-      </div>
-    </div>
+    <Shell
+      route={route}
+      me={meQ.data}
+      services={services}
+      connection={connection}
+      actionsEnabled={perms.actionsEnabled}
+      badges={badges}
+      onNavigate={onNavigate}
+    >
+      <RouteView
+        route={route}
+        onNavigate={onNavigate}
+        services={services}
+        logSearch={Boolean(meQ.data?.logSearch)}
+        me={meQ.data}
+        loading={servicesQ.isLoading}
+        error={servicesQ.isError}
+        onConnectAgent={() => go({ name: 'overview' })}
+      />
+    </Shell>
   );
+}
+
+interface RouteViewProps {
+  route: Route;
+  onNavigate: (r: Route) => void;
+  services: ServiceInfo[];
+  logSearch: boolean;
+  me: Me | undefined;
+  loading: boolean;
+  error: boolean;
+  onConnectAgent: () => void;
+}
+
+function RouteView({
+  route,
+  onNavigate,
+  services,
+  logSearch,
+  me,
+  loading,
+  error,
+  onConnectAgent,
+}: RouteViewProps) {
+  switch (route.name) {
+    case 'overview':
+      return (
+        <Overview
+          services={services}
+          loading={loading}
+          error={error}
+          onNavigate={onNavigate}
+          onConnectAgent={onConnectAgent}
+        />
+      );
+    case 'deploys':
+      return <Deploys onNavigate={onNavigate} />;
+    case 'activity':
+      return <Activity onNavigate={onNavigate} />;
+    case 'transmitter':
+      return <Transmitter />;
+    case 'hosts':
+      return <Hosts services={services} loading={loading} error={error} onNavigate={onNavigate} />;
+    case 'settings':
+      return <Settings me={me} tab={route.tab} onNavigate={onNavigate} />;
+    case 'project':
+      return <Project repo={route.repo} services={services} onNavigate={onNavigate} />;
+    case 'service':
+      return (
+        <ServiceDetail serviceId={route.id} onNavigate={onNavigate} logSearchEnabled={logSearch} />
+      );
+    default:
+      return null;
+  }
 }
