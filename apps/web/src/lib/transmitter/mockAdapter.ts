@@ -259,4 +259,18 @@ export class MockTransmitter implements TransmitterClient {
   listDeliveries(): Promise<Delivery[]> {
     return Promise.resolve([...this.deliveries].sort((a, b) => b.ts - a.ts));
   }
+
+  private muteUntil: number | null = null;
+  getMute(): Promise<{ until: number | null }> {
+    if (this.muteUntil && this.muteUntil <= Date.now()) this.muteUntil = null;
+    return Promise.resolve({ until: this.muteUntil });
+  }
+  setMute(minutes: number): Promise<{ until: number | null }> {
+    this.muteUntil = Date.now() + minutes * 60_000;
+    return Promise.resolve({ until: this.muteUntil });
+  }
+  clearMute(): Promise<void> {
+    this.muteUntil = null;
+    return Promise.resolve();
+  }
 }

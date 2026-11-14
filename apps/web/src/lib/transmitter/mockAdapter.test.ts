@@ -57,6 +57,16 @@ describe('MockTransmitter security behaviours', () => {
     expect(rotated.source.tokenHint).toBe(rotated.token.slice(-4));
   });
 
+  it('sets and clears the global mute', async () => {
+    const tx = new MockTransmitter();
+    expect((await tx.getMute()).until).toBeNull();
+    const set = await tx.setMute(60);
+    expect(set.until).toBeGreaterThan(Date.now());
+    expect((await tx.getMute()).until).not.toBeNull();
+    await tx.clearMute();
+    expect((await tx.getMute()).until).toBeNull();
+  });
+
   it('testChannel never throws and records a delivery without sending', async () => {
     const tx = new MockTransmitter();
     const channels = await tx.listChannels();

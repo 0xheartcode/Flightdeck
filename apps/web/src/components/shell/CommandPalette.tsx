@@ -56,8 +56,17 @@ export function CommandPalette({ open, onClose, services, onNavigate }: CommandP
       icon: 'cube',
       route: { name: 'service', id: s.id },
     }));
+    // Projects (distinct repos) are real jump targets — the design's "map".
+    const repos = [...new Set(services.map((s) => s.repo).filter((r): r is string => Boolean(r)))];
+    const proj: PaletteItem[] = repos.map((repo) => ({
+      key: `proj:${repo}`,
+      label: repo,
+      hint: 'Project',
+      icon: 'folder-simple',
+      route: { name: 'project', repo },
+    }));
     const q = query.trim().toLowerCase();
-    const all = [...nav, ...svc];
+    const all = [...nav, ...proj, ...svc];
     if (!q) return all;
     return all.filter(
       (i) => i.label.toLowerCase().includes(q) || i.hint?.toLowerCase().includes(q),

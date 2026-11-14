@@ -95,4 +95,17 @@ export class HttpTransmitter implements TransmitterClient {
   async listDeliveries(): Promise<Delivery[]> {
     return (await apiFetch<{ deliveries: Delivery[] }>(`${BASE}/deliveries`)).deliveries;
   }
+
+  getMute(): Promise<{ until: number | null }> {
+    return apiFetch<{ until: number | null }>(`${BASE}/mute`);
+  }
+  setMute(minutes: number): Promise<{ until: number | null }> {
+    return apiFetch<{ until: number | null }>(`${BASE}/mute`, {
+      method: 'POST',
+      ...json({ minutes }),
+    });
+  }
+  clearMute(): Promise<void> {
+    return apiFetch(`${BASE}/mute`, { method: 'DELETE' });
+  }
 }

@@ -153,6 +153,11 @@ export interface TransmitterClient {
   revokeSource(id: string): Promise<void>;
 
   listDeliveries(): Promise<Delivery[]>;
+
+  /** Global mute (all channels). `until` is epoch ms, or null when not muted. */
+  getMute(): Promise<{ until: number | null }>;
+  setMute(minutes: number): Promise<{ until: number | null }>;
+  clearMute(): Promise<void>;
 }
 
 export const CHANNEL_META: Record<
@@ -176,6 +181,7 @@ export const CHANNEL_META: Record<
     credentialLabel: 'SMTP password',
     configFields: [
       { key: 'host', label: 'SMTP host', placeholder: 'smtp.example.com:587' },
+      { key: 'user', label: 'SMTP user (optional)', placeholder: 'defaults to the From address' },
       { key: 'from', label: 'From address', placeholder: 'alerts@example.com' },
       { key: 'to', label: 'To address', placeholder: 'oncall@example.com' },
     ],

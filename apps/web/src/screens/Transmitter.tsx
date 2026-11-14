@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Badge,
@@ -59,6 +59,7 @@ export function Transmitter({ backendAvailable }: TransmitterProps) {
           Preview: no Transmitter backend is configured, so this shows mock data. Nothing is sent.
         </div>
       ) : null}
+      <MuteControl client={client} />
       <Tabs tabs={tabs} active={tab} onChange={setTab} label="Transmitter sections" />
       <div className="mt-4">
         {tab === 'signals' ? <SignalsTab client={client} /> : null}
@@ -68,6 +69,101 @@ export function Transmitter({ backendAvailable }: TransmitterProps) {
         {tab === 'deliveries' ? <DeliveriesTab client={client} /> : null}
       </div>
     </Page>
+  );
+}
+
+const MUTE_DURATIONS: { label: string; minutes: number }[] = [
+  { label: 'For 30 minutes', minutes: 30 },
+  { label: 'For 1 hour', minutes: 60 },
+  { label: 'For 8 hours', minutes: 480 },
+];
+
+function hhmm(ts: number): string {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Global "mute all channels" with durations, and the muted-until banner. */
+function MuteControl({ client }: { client: TransmitterClient }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const mute = useQuery({
+    queryKey: ['tx', 'mute'],
+    queryFn: () => client.getMute(),
+    refetchInterval: 30_000,
+  });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['tx', 'mute'] });
+
+  const setMut = useMutation({
+    mutationFn: (minutes: number) => client.setMute(minutes),
+    onSuccess: (r) => {
+      invalidate();
+      setMenuOpen(false);
+      if (r.until) toast.success(`Notifications muted until ${hhmm(r.until)}`);
+    },
+  });
+  const clearMut = useMutation({
+    mutationFn: () => client.clearMute(),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Notifications resumed');
+    },
+  });
+
+  const until = mute.data?.until ?? null;
+
+  if (until) {
+    return (
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-line bg-[var(--abg)] px-3 py-2 text-sm text-warn">
+        <span className="flex items-center gap-2">
+          <Icon name="bell-slash" size={16} className="shrink-0" />
+          Notifications muted until {hhmm(until)}. Signals are still recorded.
+        </span>
+        <Button
+          size="sm"
+          variant="default"
+          onClick={() => clearMut.mutate()}
+          disabled={clearMut.isPending}
+        >
+          Resume
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative mb-4 flex justify-end">
+      <Button
+        size="sm"
+        variant="ghost"
+        icon="bell-slash"
+        onClick={() => setMenuOpen((o) => !o)}
+        aria-expanded={menuOpen}
+      >
+        Mute all
+      </Button>
+      {menuOpen ? (
+        <>
+          <div className="fixed inset-0 z-10" aria-hidden onClick={() => setMenuOpen(false)} />
+          <div
+            role="menu"
+            className="absolute top-9 right-0 z-20 w-44 overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-[var(--pop)]"
+          >
+            {MUTE_DURATIONS.map((d) => (
+              <button
+                key={d.minutes}
+                type="button"
+                role="menuitem"
+                onClick={() => setMut.mutate(d.minutes)}
+                className="block w-full px-3 py-1.5 text-left text-sm text-fg hover:bg-row focus-visible:bg-row focus-visible:outline-none"
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -83,6 +179,37 @@ function SignalsTab({ client }: { client: TransmitterClient }) {
 
   const rows = signals.data ?? [];
   const unread = rows.filter((s) => !s.read).length;
+
+  // Group newest-first signals into Today / Earlier, matching the design.
+  const groups = useMemo(() => {
+    const today = new Date().toDateString();
+    return [
+      { label: 'Today', rows: rows.filter((s) => new Date(s.ts).toDateString() === today) },
+      { label: 'Earlier', rows: rows.filter((s) => new Date(s.ts).toDateString() !== today) },
+    ].filter((g) => g.rows.length > 0);
+  }, [rows]);
+
+  const renderSignal = (s: (typeof rows)[number]) => (
+    <li key={s.id} className={`flex items-start gap-3 px-4 py-3 ${s.read ? 'opacity-60' : ''}`}>
+      <Badge tone={SEVERITY_TONE[s.severity]} dot>
+        {s.severity}
+      </Badge>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-fg">{s.title}</div>
+        {s.body ? <div className="text-xs text-muted">{s.body}</div> : null}
+        <div className="mt-0.5 text-xs text-faint">{relativeTime(s.ts)}</div>
+      </div>
+      {!s.read ? (
+        <button
+          type="button"
+          onClick={() => markOne.mutate(s.id)}
+          className="shrink-0 text-xs text-link hover:underline focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+        >
+          Mark read
+        </button>
+      ) : null}
+    </li>
+  );
 
   return (
     <Card>
@@ -106,34 +233,37 @@ function SignalsTab({ client }: { client: TransmitterClient }) {
           description="Incoming notifications will appear here."
         />
       ) : (
-        <ul className="divide-y divide-line">
-          {rows.map((s) => (
-            <li
-              key={s.id}
-              className={`flex items-start gap-3 px-4 py-3 ${s.read ? 'opacity-60' : ''}`}
-            >
-              <Badge tone={SEVERITY_TONE[s.severity]} dot>
-                {s.severity}
-              </Badge>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-fg">{s.title}</div>
-                {s.body ? <div className="text-xs text-muted">{s.body}</div> : null}
-                <div className="mt-0.5 text-xs text-faint">{relativeTime(s.ts)}</div>
-              </div>
-              {!s.read ? (
-                <button
-                  type="button"
-                  onClick={() => markOne.mutate(s.id)}
-                  className="shrink-0 text-xs text-link hover:underline focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
-                >
-                  Mark read
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        groups.map((g) => (
+          <section key={g.label}>
+            <div className="border-b border-line bg-raised px-4 py-1.5 text-xs font-medium tracking-wide text-faint uppercase">
+              {g.label}
+            </div>
+            <ul className="divide-y divide-line">{g.rows.map(renderSignal)}</ul>
+          </section>
+        ))
       )}
     </Card>
+  );
+}
+
+/** Per-channel delivery status line, as in the design. */
+function ChannelDeliveryStatus({
+  enabled,
+  last,
+}: {
+  enabled: boolean;
+  last?: { ok: boolean; ts: number };
+}) {
+  if (!enabled) return <span className="text-faint">Disabled</span>;
+  if (!last) return null;
+  return last.ok ? (
+    <span className="flex items-center gap-1 text-ok">
+      <Icon name="check-circle" size={12} /> Delivered {relativeTime(last.ts)}
+    </span>
+  ) : (
+    <span className="flex items-center gap-1 text-danger">
+      <Icon name="x-circle" size={12} /> Last delivery failed
+    </span>
   );
 }
 
@@ -177,6 +307,19 @@ function ChannelsTab({ client }: { client: TransmitterClient }) {
     },
   });
 
+  // The latest delivery per channel drives the status line, as in the design.
+  const deliveries = useQuery({
+    queryKey: ['tx', 'deliveries'],
+    queryFn: () => client.listDeliveries(),
+  });
+  const lastByChannel = useMemo(() => {
+    const map = new Map<string, { ok: boolean; ts: number }>();
+    for (const d of deliveries.data ?? []) {
+      if (!map.has(d.channelId)) map.set(d.channelId, { ok: d.ok, ts: d.ts });
+    }
+    return map;
+  }, [deliveries.data]);
+
   const rows = channels.data ?? [];
 
   return (
@@ -204,11 +347,14 @@ function ChannelsTab({ client }: { client: TransmitterClient }) {
                     {c.name}
                     {!c.enabled ? <Badge tone="neutral">disabled</Badge> : null}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-faint">
-                    <Icon name={c.credentialSet ? 'lock-simple' : 'warning'} size={12} />
-                    {c.credentialSet
-                      ? `Credential set${c.credentialUpdatedAt ? `, updated ${relativeTime(c.credentialUpdatedAt)}` : ''}`
-                      : 'No credential'}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-faint">
+                    <span className="flex items-center gap-1.5">
+                      <Icon name={c.credentialSet ? 'lock-simple' : 'warning'} size={12} />
+                      {c.credentialSet
+                        ? `Credential set${c.credentialUpdatedAt ? `, updated ${relativeTime(c.credentialUpdatedAt)}` : ''}`
+                        : 'No credential'}
+                    </span>
+                    <ChannelDeliveryStatus enabled={c.enabled} last={lastByChannel.get(c.id)} />
                   </div>
                 </div>
                 <Button
