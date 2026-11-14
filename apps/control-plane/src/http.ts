@@ -195,6 +195,10 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
       identityEnabled: idEnabled,
       loginFlow: loginEnabled,
       logSearch: Boolean(ctx.loki),
+      // Server-wide action switch (FD_ENABLE_ACTIONS). The UI disables every
+      // action control and shows a banner when this is off, so operators see
+      // why restart/redeploy/set-env are unavailable instead of a silent no-op.
+      actionsEnabled: config.actionsEnabled,
       subject: auth.principal?.subject,
       name: auth.principal?.name,
       roles: auth.principal?.roles ?? [],

@@ -16,6 +16,13 @@ export interface Me {
   permissions: Array<'view' | 'act' | 'reveal'>;
   /** True when durable log search (Loki) is configured, so the UI can offer a search box. */
   logSearch: boolean;
+  /**
+   * Server-wide action switch (FD_ENABLE_ACTIONS). When false, no one can
+   * restart/redeploy/set-env regardless of role; the UI shows a global banner
+   * and disables every action control. Older control planes omit it, so it is
+   * optional and treated as enabled when absent.
+   */
+  actionsEnabled?: boolean;
 }
 
 /** One line returned by the durable log search endpoint, newest-last. */
@@ -23,6 +30,18 @@ export interface SearchLine {
   ts: number;
   stream: string;
   line: string;
+}
+
+/** One entry from the operator audit trail (GET /api/audit), newest-first. */
+export interface AuditEntry {
+  ts: number;
+  action: 'restart' | 'redeploy' | 'set_env';
+  /** The service the action targeted. */
+  serviceId: string;
+  /** Who triggered it (client address/identifier or subject). */
+  actor: string;
+  ok: boolean;
+  error?: string;
 }
 
 /** Full detail for one service (GET /api/services/:id). */
@@ -148,6 +167,42 @@ export async function searchLogs(id: string, q: string): Promise<SearchLine[]> {
   }
   const data = (await res.json()) as { lines: SearchLine[] };
   return data.lines;
+}
+
+/**
+ * Cross-service deploy timeline (GET /api/deploys). Optionally filtered to one
+ * repo. Newest-first, as the control plane returns them.
+ */
+export async function fetchDeploys(repo?: string, limit?: number): Promise<DeployRecord[]> {
+  const params = new URLSearchParams();
+  if (repo) params.set('repo', repo);
+  if (limit) params.set('limit', String(limit));
+  const query = params.toString();
+  const res = await fetch(`${API_URL}/api/deploys${query ? `?${query}` : ''}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `deploys request failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { deploys: DeployRecord[] };
+  return data.deploys;
+}
+
+/** Operator audit trail (GET /api/audit), newest-first. Read-only. */
+export async function fetchAudit(limit?: number): Promise<AuditEntry[]> {
+  const params = new URLSearchParams();
+  if (limit) params.set('limit', String(limit));
+  const query = params.toString();
+  const res = await fetch(`${API_URL}/api/audit${query ? `?${query}` : ''}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `audit request failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { audit: AuditEntry[] };
+  return data.audit;
 }
 
 /**

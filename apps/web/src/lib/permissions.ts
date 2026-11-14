@@ -34,10 +34,25 @@ const REASON: Record<Exclude<Perm, 'view'>, string> = {
   reveal: 'Requires the admin role',
 };
 
+/**
+ * Actions that also require the server-wide action switch (FD_ENABLE_ACTIONS):
+ * anything that mutates a container. Revealing env is a read, so it is not here.
+ */
+const NEEDS_SWITCH: Record<PermAction, boolean> = {
+  restart: true,
+  redeploy: true,
+  edit_env: true,
+  reveal_env: false,
+};
+
+const ACTIONS_OFF_REASON = 'Actions are disabled on this server';
+
 export interface Permissions {
   identityEnabled: boolean;
   /** True once the caller is known to be a signed-in principal (or identity is off). */
   authenticated: boolean;
+  /** Server-wide action switch; false disables every mutating control. */
+  actionsEnabled: boolean;
   has: (perm: Perm) => boolean;
   /** How a given gated action should render. */
   can: (action: PermAction) => ControlState;
@@ -52,10 +67,18 @@ export function permissionsFrom(me: Me | undefined, unauthorized = false): Permi
   const identityEnabled = me?.identityEnabled ?? unauthorized;
   const set = new Set<Perm>(me?.permissions ?? []);
   const authenticated = identityEnabled ? Boolean(me?.subject) : true;
+  // Absent on older control planes → treat as enabled. A 401 (me undefined)
+  // leaves it enabled too; the per-permission gate still disables the control.
+  const actionsEnabled = me?.actionsEnabled ?? true;
 
   const has = (perm: Perm): boolean => (identityEnabled ? set.has(perm) : true);
 
   const can = (action: PermAction): ControlState => {
+    // The server-wide switch wins: a disabled server is why the control is off,
+    // regardless of the caller's role.
+    if (NEEDS_SWITCH[action] && !actionsEnabled) {
+      return { visible: true, enabled: false, reason: ACTIONS_OFF_REASON };
+    }
     const need = REQUIRED[action];
     if (has(need)) return { visible: true, enabled: true };
     // §1: a read-only user sees gated controls "clearly disabled with the
@@ -63,5 +86,5 @@ export function permissionsFrom(me: Me | undefined, unauthorized = false): Permi
     return { visible: true, enabled: false, reason: REASON[need] };
   };
 
-  return { identityEnabled, authenticated, has, can };
+  return { identityEnabled, authenticated, actionsEnabled, has, can };
 }
