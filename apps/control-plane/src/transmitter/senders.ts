@@ -1,3 +1,4 @@
+import nodemailer from 'nodemailer';
 import type { Channel, Signal } from './types.js';
 import { assertOutboundAllowed } from './ssrf.js';
 
@@ -90,8 +91,29 @@ export const realSend: SendFn = async (channel, credential, signal) => {
       );
       return;
     }
-    case 'email':
-      throw new Error('SMTP sender is not implemented in this build');
+    case 'email': {
+      const host = channel.config.host;
+      const to = channel.config.to;
+      const from = channel.config.from;
+      if (!host || !to || !from) throw new Error('missing SMTP host/from/to');
+      const [h, portStr] = host.split(':');
+      const port = Number(portStr) || 587;
+      const transport = nodemailer.createTransport({
+        host: h,
+        port,
+        secure: port === 465,
+        auth: credential ? { user: channel.config.user || from, pass: credential } : undefined,
+        connectionTimeout: DEFAULT_TIMEOUT_MS,
+        greetingTimeout: DEFAULT_TIMEOUT_MS,
+      });
+      await transport.sendMail({
+        from,
+        to,
+        subject: `[${signal.severity.toUpperCase()}] ${signal.title}`,
+        text: signal.body ?? signal.title,
+      });
+      return;
+    }
     default:
       throw new Error(`unknown channel kind: ${channel.kind as string}`);
   }

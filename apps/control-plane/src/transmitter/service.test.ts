@@ -121,6 +121,18 @@ describe('TransmitterService dispatch', () => {
     expect(d?.error).toContain('HTTP 500');
   });
 
+  it('global mute suppresses delivery but still records the signal', async () => {
+    const h = harness();
+    route(h.store);
+    h.store.setMuteUntil(Date.now() + 60_000);
+    const signal = await h.service.emit('src_builtin', {
+      severity: 'critical',
+      title: 'muted one',
+    });
+    expect(h.sent).toHaveLength(0); // no delivery
+    expect(h.store.listSignals().some((s) => s.id === signal.id)).toBe(true); // still recorded
+  });
+
   it('testChannel delivers directly, bypassing routes', async () => {
     const h = harness();
     const ch = h.store.createChannel({

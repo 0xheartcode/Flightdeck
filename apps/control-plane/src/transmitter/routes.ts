@@ -147,6 +147,27 @@ export function registerTransmitter(app: Hono<Env>, ctx: Context): void {
   // --- deliveries ---
   app.get('/api/transmitter/deliveries', (c) => c.json({ deliveries: store.listDeliveries() }));
 
+  // --- global mute (all channels) ---
+  app.get('/api/transmitter/mute', (c) => c.json({ until: store.getMuteUntil() }));
+  app.post('/api/transmitter/mute', async (c) => {
+    if (!canAct(c)) return c.json({ error: 'forbidden' }, 403);
+    const body = (await c.req.json().catch(() => null)) as { minutes?: number } | null;
+    const minutes = Number(body?.minutes);
+    if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 7 * 24 * 60) {
+      return c.json({ error: 'invalid minutes' }, 400);
+    }
+    const until = Date.now() + minutes * 60_000;
+    store.setMuteUntil(until);
+    audit('notify.mute', `all channels, ${minutes}m`, actor(c));
+    return c.json({ until });
+  });
+  app.delete('/api/transmitter/mute', (c) => {
+    if (!canAct(c)) return c.json({ error: 'forbidden' }, 403);
+    store.setMuteUntil(null);
+    audit('notify.unmute', 'all channels', actor(c));
+    return c.body(null, 204);
+  });
+
   // --- inbound ingest (outside /api; self-authenticated by the source token) ---
   app.post('/transmitter/ingest/:sourceId', async (c) => {
     const sourceId = c.req.param('sourceId');

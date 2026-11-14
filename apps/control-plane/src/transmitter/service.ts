@@ -96,6 +96,11 @@ export class TransmitterService {
   }
 
   private async dispatch(signal: Signal, eventType?: string, project?: string): Promise<void> {
+    // Global mute: the signal is still recorded in the inbox (done by emit),
+    // but no channel receives a delivery until the mute window passes.
+    const muteUntil = this.store.getMuteUntil();
+    if (muteUntil && this.now() < muteUntil) return;
+
     const targets = new Map<string, string>(); // channelId -> routeId (first match wins)
     for (const route of this.store.listRoutes()) {
       if (route.muted) continue;

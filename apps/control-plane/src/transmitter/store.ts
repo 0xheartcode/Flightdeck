@@ -55,6 +55,7 @@ export class TransmitterStore {
         id TEXT PRIMARY KEY, ts INTEGER NOT NULL, channel_id TEXT NOT NULL, channel_name TEXT NOT NULL,
         route_id TEXT, signal_title TEXT NOT NULL, ok INTEGER NOT NULL, error TEXT
       );
+      CREATE TABLE IF NOT EXISTS tx_settings (key TEXT PRIMARY KEY, value TEXT);
     `);
     // Seed the always-on builtin source once.
     const hasBuiltin = this.db.prepare('SELECT 1 FROM tx_sources WHERE kind = ?').get('builtin');
@@ -335,6 +336,27 @@ export class TransmitterStore {
         bit(d.ok),
         d.error ?? null,
       );
+  }
+
+  // --- global mute ---
+
+  /** Epoch ms until which all channels are muted, or null when not muted. */
+  getMuteUntil(): number | null {
+    const r = this.db.prepare("SELECT value FROM tx_settings WHERE key = 'mute_until'").get() as
+      { value: string } | undefined;
+    const n = r ? Number(r.value) : NaN;
+    return Number.isFinite(n) && n > Date.now() ? n : null;
+  }
+  setMuteUntil(until: number | null): void {
+    if (until === null) {
+      this.db.prepare("DELETE FROM tx_settings WHERE key = 'mute_until'").run();
+      return;
+    }
+    this.db
+      .prepare(
+        "INSERT INTO tx_settings (key, value) VALUES ('mute_until', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+      .run(String(until));
   }
 
   close(): void {
