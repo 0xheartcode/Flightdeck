@@ -106,7 +106,11 @@ screens:
   once. The wire contract is
   [`docs/design/TRANSMITTER-API.md`](docs/design/TRANSMITTER-API.md); when the
   backend is disabled the UI falls back to a mock with a "preview" banner.
-- **Settings** — read-only identity, roles and server feature flags.
+- **Settings** — identity, roles and server feature flags, plus optional
+  self-managed accounts: **Users** (local username/password login, roles
+  viewer/operator/admin) and **Agents** (issue/rotate/revoke agent tokens). Both
+  are admin-gated, audited, and off by default (`FD_LOCAL_USERS`,
+  `FD_AGENT_TOKEN_STORE`); see [docs/security.md](docs/security.md).
 
 Controls reflect the server-enforced permission model (`view` / `act` /
 `reveal`) and the `FD_ENABLE_ACTIONS` switch: ungranted or disabled actions are
@@ -127,7 +131,7 @@ For production, run the control plane and web UI from `docker/compose.prod.yaml`
 
 ## Security
 
-The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production. Agents authenticate with a bearer token (sent as a header, compared in constant time, `wss://` supported): use a single `FD_AGENT_TOKEN`, or give each agent its own credential via `FD_AGENT_TOKENS` / `FD_AGENT_TOKENS_FILE` so one can be revoked individually (the control plane reloads the file and drops the revoked connection). The browser API and log stream are gated by `FD_DASHBOARD_TOKEN` when set, or by per-user identity: set an OIDC key (`FD_OIDC_HS256_SECRET` or `FD_OIDC_RS256_PUBLIC_KEY`) to require a verified JWT, map roles to permissions (`FD_OPERATOR_ROLES`, `FD_ADMIN_ROLES`), and the audit log then records the user. CORS is restricted to `FD_CORS_ORIGIN` (not `*`), and the `/stream` upgrade checks `Origin`. Both WebSocket servers cap frame size and the registry is bounded. See [docs/security.md](docs/security.md) for the full threat model and knobs.
+The agent needs the Docker or Podman socket. On Docker that socket is root-equivalent, so prefer a **rootless Podman** socket in production. Agents authenticate with a bearer token (sent as a header, compared in constant time, `wss://` supported): use a single `FD_AGENT_TOKEN`, or give each agent its own credential via `FD_AGENT_TOKENS` / `FD_AGENT_TOKENS_FILE` so one can be revoked individually (the control plane reloads the file and drops the revoked connection). The browser API and log stream are gated by `FD_DASHBOARD_TOKEN` when set, or by per-user identity: set an OIDC key (`FD_OIDC_HS256_SECRET` or `FD_OIDC_RS256_PUBLIC_KEY`) to require a verified JWT, map roles to permissions (`FD_OPERATOR_ROLES`, `FD_ADMIN_ROLES`), and the audit log then records the user. For a standalone deployment with no external IdP, enable local accounts with `FD_LOCAL_USERS` (scrypt-hashed passwords, roles viewer/operator/admin, seeded via `FD_BOOTSTRAP_ADMIN`); agent credentials can likewise be issued, rotated and revoked from the UI with `FD_AGENT_TOKEN_STORE`. CORS is restricted to `FD_CORS_ORIGIN` (not `*`), and the `/stream` upgrade checks `Origin`. Both WebSocket servers cap frame size and the registry is bounded. See [docs/security.md](docs/security.md) for the full threat model and knobs.
 
 ## Roadmap
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Me } from '@/api';
-import { Badge, Card, EmptyState, Icon, Tabs } from '@/components/ui';
+import { localLogout, type Me } from '@/api';
+import { Badge, Button, Card, EmptyState, Icon, Tabs } from '@/components/ui';
 import type { Route } from '@/lib/router';
 import { Page, PageHeader } from './parts';
+import { AgentTokensPanel, UsersPanel } from './SettingsEditors';
 
 export interface SettingsProps {
   me?: Me;
@@ -33,8 +34,16 @@ function FlagRow({ label, on, help }: { label: string; on: boolean; help: string
 export function Settings({ me, tab = 'account', onNavigate }: SettingsProps) {
   const [active, setActive] = useState(tab);
 
+  // The admin tier (reveal) gates user and agent-token management, mirroring the
+  // server. Covers OIDC admins, local admins, and legacy open mode alike.
+  const isAdmin = Boolean(me?.permissions.includes('reveal'));
+  const showUsers = Boolean(me?.localUsers) && isAdmin;
+  const showAgents = Boolean(me?.agentTokens) && isAdmin;
+
   const tabs = [
     { id: 'account', label: 'Account' },
+    ...(showUsers ? [{ id: 'users', label: 'Users' }] : []),
+    ...(showAgents ? [{ id: 'agents', label: 'Agents' }] : []),
     { id: 'server', label: 'Server' },
     { id: 'access', label: 'Access' },
   ];
@@ -49,8 +58,8 @@ export function Settings({ me, tab = 'account', onNavigate }: SettingsProps) {
       <div className="mt-4">
         {active === 'account' ? (
           <Card>
-            {me?.identityEnabled ? (
-              me.subject ? (
+            {me?.subject ? (
+              <>
                 <ul className="divide-y divide-line">
                   <li className="flex items-center justify-between px-4 py-3">
                     <span className="text-sm text-muted">Signed in as</span>
@@ -75,13 +84,30 @@ export function Settings({ me, tab = 'account', onNavigate }: SettingsProps) {
                     </span>
                   </li>
                 </ul>
-              ) : (
-                <EmptyState
-                  icon="sign-in"
-                  title="Not signed in"
-                  description="Sign in to see your account details."
-                />
-              )
+                {me.localUsers ? (
+                  <div className="flex items-center justify-between border-t border-line px-4 py-3">
+                    <span className="text-xs text-faint">
+                      End this local session on this device.
+                    </span>
+                    <Button
+                      size="sm"
+                      icon="sign-out"
+                      onClick={async () => {
+                        await localLogout();
+                        window.location.reload();
+                      }}
+                    >
+                      Sign out
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : me?.identityEnabled ? (
+              <EmptyState
+                icon="sign-in"
+                title="Not signed in"
+                description="Sign in to see your account details."
+              />
             ) : (
               <EmptyState
                 icon="lock-simple"
@@ -91,6 +117,9 @@ export function Settings({ me, tab = 'account', onNavigate }: SettingsProps) {
             )}
           </Card>
         ) : null}
+
+        {active === 'users' && showUsers ? <UsersPanel /> : null}
+        {active === 'agents' && showAgents ? <AgentTokensPanel /> : null}
 
         {active === 'server' ? (
           <Card>

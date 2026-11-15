@@ -38,6 +38,14 @@ Mitigations, strongest first:
 - A connection may only report for services it announced, and only for its own
   host, so one credential cannot spoof or clobber another host's services, and
   a service is removed when the agent that announced it disconnects.
+- Managed agent tokens (optional): set `FD_AGENT_TOKEN_STORE=true` (persist with
+  `FD_AGENT_TOKENS_DB_FILE`) to issue, rotate and revoke agent credentials from
+  the UI (Settings → Agents) or the `/api/agent-tokens` API instead of editing a
+  file. A token is shown once at issue/rotate and stored only as a SHA-256 hash
+  plus a 4-char hint; agent auth consults the static `FD_AGENT_TOKEN[S]` sources
+  first, then the managed store, so both work together. Issuing, rotating and
+  revoking need the admin tier and are audited; a revoked token is rejected on
+  reconnect and its live connection dropped on the next sweep.
 
 ## Browser to control plane
 
@@ -79,6 +87,24 @@ Mitigations, strongest first:
   user may view. With no roles configured, any authenticated user is a trusted
   operator. The browser cannot set WebSocket headers, so the stream token rides
   the `?token=` query; treat it like any bearer token and run behind TLS.
+
+### Local users (self-managed accounts)
+
+- For a standalone deployment with no external IdP, set `FD_LOCAL_USERS=true`
+  (persist with `FD_LOCAL_USERS_DB_FILE`) and `FD_SESSION_SECRET`. Users sign in
+  with a username and password at `/auth/local/login`, which sets the same
+  HttpOnly, SameSite=Lax session cookie the OIDC flow uses. Passwords are stored
+  only as per-user **scrypt** hashes and are never returned by the API.
+- Local roles are `viewer` / `operator` / `admin`, mapping to view / act / reveal
+  exactly like the OIDC roles. Admins manage users (Settings → Users, or the
+  `/api/users` API). Every change is audited; a guard refuses to demote, disable
+  or delete the last enabled admin so the instance cannot lock itself out.
+- Enabling local users makes `/api` require authentication even when OIDC is off:
+  a caller must present a valid local session (or the dashboard token, as a
+  service-to-service fallback). Seed the first admin with
+  `FD_BOOTSTRAP_ADMIN=username:password` (applied only while the user store is
+  empty). `/auth/methods` publicly reports which sign-in methods are enabled so
+  the login screen can render the right form; it carries no secrets.
 
 ## Operator actions
 

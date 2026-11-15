@@ -45,7 +45,7 @@ retained stats/metrics history. Those drive the gaps below.
 | **Hosts** | yes (`hosts`, badge = online/total) | `/api/services` (grouped by `host`) | partial | No host-level endpoint. Derive hosts from `ServiceInfo.host`; "online" = has ≥1 running service / live WS. Agent version, OS, uptime shown in design have **no API field** → omit + log. |
 | **Service detail** | yes | `/api/services/:id` + WS | exists | Env masked unless `reveal`. Restart/redeploy gated by `act`; set_env by `reveal`. |
 | **Project** | yes (`project`) | `/api/services` grouped by `repo`/`environment` | partial | No project entity; a "project" is the set of services sharing `repo`. Project-level metadata in design (description, links) has no API → omit + log. |
-| **Settings** | yes (`settings`: `roles`, `tokens`, `vars`) | `/api/me` | partial | Roles/permissions are read-only from `me`. Token/var management in design has no write endpoint → show read-only state + "managed by operator" + log the gap. |
+| **Settings** | yes (`settings`: `roles`, `tokens`, `vars`) | `/api/me`, `/api/users`, `/api/agent-tokens` | exists | Identity/permissions read-only from `me`. The design's user + agent-token management is now a **real backend** (opt-in: `FD_LOCAL_USERS`, `FD_AGENT_TOKEN_STORE`): Settings → Users (create/roles/disable/reset/delete) and Agents (issue/rotate/revoke). Service variable editing still has no write endpoint → stays a note. |
 
 ## Drawers, modals, overlays
 
@@ -102,7 +102,7 @@ retained stats/metrics history. Those drive the gaps below.
 | Deploys | ✅ | real (`/api/deploys`) |
 | Activity / Audit | ✅ | real (`/api/audit`, read-only) |
 | Durable log search | ✅ | real (`/logs/search`, gated by `me.logSearch`) |
-| Settings | ✅ | real (`/api/me`, read-only) |
+| Settings | ✅ | real (`/api/me`; + `/api/users` & `/api/agent-tokens` when enabled) |
 | Sign in | ✅ | real (`/auth/login` + token fallback) |
 | Transmitter (signals/channels/routes/sources/delivery) | ✅ | **real backend** (control-plane) + mock fallback for preview/tests |
 | Global states (stale, actions-disabled, no-env, permission-denied) | ✅ | real |

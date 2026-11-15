@@ -20,6 +20,11 @@ import { Store } from './store.js';
 import { createHttpApp } from './http.js';
 import { TransmitterStore } from './transmitter/store.js';
 import { TransmitterService } from './transmitter/service.js';
+import { AgentTokenStore } from './agent-tokens/store.js';
+import { UserStore } from './users/store.js';
+import { MIN_PASSWORD_LENGTH } from './users/types.js';
+import { readLocalSession } from './users/session.js';
+import type { Principal } from './identity.js';
 import { handleAgentConnection } from './agent-hub.js';
 import { handleClientConnection } from './client-hub.js';
 
@@ -61,6 +66,21 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     const txStore = new TransmitterStore(config.transmitterDbFile);
     transmitterCtx = { store: txStore, service: new TransmitterService(txStore, audit) };
   }
+  // Managed agent credentials (issue/rotate/revoke via the API), when enabled.
+  const agentTokens = config.agentTokenStoreEnabled
+    ? new AgentTokenStore(config.agentTokensDbFile)
+    : undefined;
+  // Local, self-managed user accounts (username/password auth), when enabled.
+  let users: UserStore | undefined;
+  if (config.localUsersEnabled) {
+    users = new UserStore(config.localUsersDbFile);
+    seedBootstrapAdmin(users, config.bootstrapAdmin, log);
+  }
+  // Agent authentication consults the static credential store first, then any
+  // managed tokens, so both sources work side by side.
+  const verifyAgentToken = (token: string | undefined): string | null =>
+    credentials.verify(token) ?? agentTokens?.verify(token) ?? null;
+
   const ctx: Context = {
     config,
     store: new Store(config.logBufferSize, config.maxServices),
@@ -72,6 +92,8 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     loki,
     bus,
     transmitter: transmitterCtx,
+    users,
+    agentTokens,
   };
 
   // Apply events from other instances to the local store (and thus to local
@@ -156,6 +178,17 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     const { pathname, searchParams } = new URL(req.url ?? '', 'http://localhost');
     const headerToken = bearer(req.headers.authorization);
 
+    // Resolve a local-user session from the cookie so the stream enforces the
+    // same permissions the REST API does for self-managed accounts.
+    let localPrincipal: Principal | undefined;
+    if (users) {
+      const uid = readLocalSession(config.sessionSecret, req.headers.cookie);
+      const user = uid ? users.get(uid) : null;
+      if (user && !user.disabled) {
+        localPrincipal = { subject: user.id, name: user.username, roles: user.roles };
+      }
+    }
+
     const decision = authorizeUpgrade(
       {
         pathname,
@@ -163,9 +196,10 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
         queryToken: searchParams.get('token') ?? undefined,
         cookieToken: sessionToken(req.headers.cookie),
         origin: req.headers.origin,
+        localPrincipal,
       },
       config,
-      (token) => credentials.verify(token),
+      (token) => verifyAgentToken(token),
       (token) => verifyToken(token, config, jwks),
     );
 
@@ -193,7 +227,13 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
 
     clientWss.handleUpgrade(req, socket, head, (ws) => {
       track(ws);
-      handleClientConnection(ws, ctx, req.socket.remoteAddress ?? 'unknown', decision.principal);
+      handleClientConnection(
+        ws,
+        ctx,
+        req.socket.remoteAddress ?? 'unknown',
+        decision.principal,
+        decision.perms,
+      );
     });
   });
 
@@ -201,7 +241,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
   const revocationTimer = setInterval(() => {
     credentials.reload();
     for (const [ws, token] of liveAgents) {
-      if (credentials.verify(token) === null) {
+      if (verifyAgentToken(token) === null) {
         log.warn('agent credential revoked; closing connection');
         ws.close(1008, 'credential revoked');
       }
@@ -222,4 +262,28 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
     });
 
   return { listening, close };
+}
+
+/**
+ * Seed a first admin from FD_BOOTSTRAP_ADMIN (`username:password`) when the
+ * local-user store is empty, so a fresh instance is reachable without a chicken-
+ * and-egg lockout. Does nothing once any user exists.
+ */
+function seedBootstrapAdmin(
+  users: UserStore,
+  spec: string,
+  log: { info: (obj: unknown, msg?: string) => void; warn: (msg: string) => void },
+): void {
+  if (!spec || users.count > 0) return;
+  const idx = spec.indexOf(':');
+  const username = idx > 0 ? spec.slice(0, idx).trim() : '';
+  const password = idx > 0 ? spec.slice(idx + 1) : '';
+  if (!username || password.length < MIN_PASSWORD_LENGTH) {
+    log.warn(
+      `FD_BOOTSTRAP_ADMIN ignored: expected "username:password" with a password of at least ${MIN_PASSWORD_LENGTH} characters`,
+    );
+    return;
+  }
+  users.create(username, password, ['admin']);
+  log.info({ username }, 'seeded bootstrap admin from FD_BOOTSTRAP_ADMIN');
 }
