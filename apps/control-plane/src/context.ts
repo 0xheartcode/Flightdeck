@@ -9,6 +9,8 @@ import type { Metrics } from './metrics.js';
 import type { Store } from './store.js';
 import type { TransmitterService } from './transmitter/service.js';
 import type { TransmitterStore } from './transmitter/store.js';
+import type { AgentTokenStore } from './agent-tokens/store.js';
+import type { UserStore } from './users/store.js';
 
 /** Shared services wired once at startup and passed to the connection hubs. */
 export interface Context {
@@ -26,4 +28,8 @@ export interface Context {
   bus: Bus;
   /** The Transmitter notifications hub (store + dispatcher), when enabled. */
   transmitter?: { store: TransmitterStore; service: TransmitterService };
+  /** Local, self-managed user accounts, when FD_LOCAL_USERS is enabled. */
+  users?: UserStore;
+  /** Managed agent credentials, when FD_AGENT_TOKEN_STORE is enabled. */
+  agentTokens?: AgentTokenStore;
 }

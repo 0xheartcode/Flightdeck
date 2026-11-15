@@ -1,6 +1,8 @@
 import type { Config } from './config.js';
 import { tokenOk } from './auth.js';
-import { identityEnabled, type Principal } from './identity.js';
+import { identityEnabled, legacyPermissions, type Permission, type Principal } from './identity.js';
+import { permissionsForRoles } from './users/types.js';
+import type { Role } from './users/types.js';
 
 export interface UpgradeContext {
   pathname: string;
@@ -12,6 +14,8 @@ export interface UpgradeContext {
   cookieToken?: string | undefined;
   /** Origin header of the handshake, if any. */
   origin?: string | undefined;
+  /** Principal resolved from a local-user session cookie, if any (self-managed accounts). */
+  localPrincipal?: Principal | undefined;
 }
 
 export interface UpgradeDecision {
@@ -22,6 +26,8 @@ export interface UpgradeDecision {
   agentName?: string;
   /** Authenticated user, set when identity is enabled and a /stream upgrade is accepted. */
   principal?: Principal;
+  /** Resolved permissions, set when the source is authoritative (local session or dashboard token). */
+  perms?: Set<Permission>;
 }
 
 /** Resolve a presented agent token to its name, or null if unknown. */
@@ -67,10 +73,28 @@ export function authorizeUpgrade(
     if (!originOk(ctx.origin, config.corsOrigin)) {
       return { ok: false, status: 403 };
     }
+    // A local-user session takes precedence: its roles are authoritative, so the
+    // stream enforces the same permissions as the REST API.
+    if (ctx.localPrincipal) {
+      return {
+        ok: true,
+        status: 101,
+        principal: ctx.localPrincipal,
+        perms: permissionsForRoles(ctx.localPrincipal.roles as Role[]),
+      };
+    }
     const presented = ctx.headerToken ?? ctx.queryToken ?? ctx.cookieToken;
     if (identityEnabled(config)) {
       const principal = verifyClient ? verifyClient(presented) : null;
       return principal ? { ok: true, status: 101, principal } : { ok: false, status: 401 };
+    }
+    // When local users are enabled, the stream requires authentication too; the
+    // dashboard token stays a service-to-service fallback with full permissions.
+    if (config.localUsersEnabled) {
+      if (config.dashboardToken && tokenOk(config.dashboardToken, presented)) {
+        return { ok: true, status: 101, perms: legacyPermissions() };
+      }
+      return { ok: false, status: 401 };
     }
     if (config.dashboardToken && !tokenOk(config.dashboardToken, presented)) {
       return { ok: false, status: 401 };

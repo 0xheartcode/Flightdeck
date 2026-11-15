@@ -27,6 +27,16 @@ export interface Config {
   transmitterEnabled: boolean;
   /** SQLite file for the Transmitter store, or ':memory:' (default). */
   transmitterDbFile: string;
+  /** Whether the local-user auth path (self-managed accounts) is enabled. Off by default. */
+  localUsersEnabled: boolean;
+  /** SQLite file for the local-user store, or ':memory:' (default, ephemeral). */
+  localUsersDbFile: string;
+  /** `username:password` admin seeded on an empty local-user store at startup. */
+  bootstrapAdmin: string;
+  /** Whether the managed agent-token store is enabled. Off by default. */
+  agentTokenStoreEnabled: boolean;
+  /** SQLite file for the managed agent-token store, or ':memory:' (default). */
+  agentTokensDbFile: string;
   /** How long to wait for an agent to report a command result. */
   actionTimeoutMs: number;
   /** Max audit entries kept in memory (served at /api/audit). */
@@ -136,6 +146,11 @@ export function loadConfig(): Config {
     actionsEnabled: process.env.FD_ENABLE_ACTIONS === 'true',
     transmitterEnabled: process.env.FD_TRANSMITTER !== 'false',
     transmitterDbFile: process.env.FD_TRANSMITTER_DB_FILE ?? ':memory:',
+    localUsersEnabled: process.env.FD_LOCAL_USERS === 'true',
+    localUsersDbFile: process.env.FD_LOCAL_USERS_DB_FILE ?? ':memory:',
+    bootstrapAdmin: process.env.FD_BOOTSTRAP_ADMIN ?? '',
+    agentTokenStoreEnabled: process.env.FD_AGENT_TOKEN_STORE === 'true',
+    agentTokensDbFile: process.env.FD_AGENT_TOKENS_DB_FILE ?? ':memory:',
     actionTimeoutMs: num(process.env.FD_ACTION_TIMEOUT_MS, 20_000),
     auditMax: num(process.env.FD_AUDIT_MAX, 500),
     auditFile: process.env.FD_AUDIT_LOG_FILE ?? '',
@@ -173,18 +188,21 @@ export function loadConfig(): Config {
   const identityOn = Boolean(
     config.oidcHs256Secret || config.oidcRs256PublicKey || config.oidcJwksUri,
   );
+  // Local users also authenticate the browser API and stream, so treat them like
+  // identity for the "unauthenticated" warnings.
+  const authOn = identityOn || config.localUsersEnabled;
   const log = logger.child({ component: 'config' });
-  if (!config.dashboardToken && !identityOn) {
+  if (!config.dashboardToken && !authOn) {
     log.warn(
-      'neither FD_DASHBOARD_TOKEN nor OIDC is set; the browser API and log stream are ' +
-        'UNAUTHENTICATED. Configure identity, set a dashboard token, or keep the control ' +
-        'plane on a trusted network only.',
+      'neither FD_DASHBOARD_TOKEN, OIDC nor FD_LOCAL_USERS is set; the browser API and log ' +
+        'stream are UNAUTHENTICATED. Configure identity or local users, set a dashboard token, ' +
+        'or keep the control plane on a trusted network only.',
     );
   }
   if (config.corsOrigin === '*') {
     log.warn('FD_CORS_ORIGIN is "*"; any website can call the API from a browser.');
   }
-  if (config.actionsEnabled && !config.dashboardToken && !identityOn) {
+  if (config.actionsEnabled && !config.dashboardToken && !authOn) {
     log.warn(
       'FD_ENABLE_ACTIONS is on without authentication; anyone who can reach the stream ' +
         'can restart or redeploy containers. Configure identity, set a dashboard token, ' +

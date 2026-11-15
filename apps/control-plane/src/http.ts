@@ -28,6 +28,10 @@ import {
 } from './oidclogin.js';
 import { logger } from './logger.js';
 import { registerTransmitter } from './transmitter/routes.js';
+import { registerAgentTokens } from './agent-tokens/routes.js';
+import { registerUsers } from './users/routes.js';
+import { readLocalSession } from './users/session.js';
+import { permissionsForRoles } from './users/types.js';
 
 const log = logger.child({ component: 'http' });
 
@@ -58,6 +62,11 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
   const loginEnabled = loginFlowEnabled(config);
   // Mark cookies Secure when the callback is served over https (production).
   const secureCookies = config.oidcRedirectUri.startsWith('https');
+
+  // The local-login and auth-discovery endpoints under /auth are called with
+  // fetch() from the SPA (unlike the OIDC full-page redirects), so they need
+  // CORS. This must be registered before those routes to apply to them.
+  app.use('/auth/*', cors({ origin: config.corsOrigin, credentials: config.corsOrigin !== '*' }));
 
   // Metrics are unauthenticated (counts only, no secrets) and outside /api so
   // the CORS and dashboard-token middleware below do not apply.
@@ -137,6 +146,17 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
     });
   }
 
+  // Public discovery of which sign-in methods this control plane offers, so the
+  // login screen can render the right forms before any session exists. Carries
+  // no secrets and needs no auth — it lives outside /api on purpose.
+  app.get('/auth/methods', (c) =>
+    c.json({
+      identityEnabled: idEnabled,
+      loginFlow: loginEnabled,
+      localUsers: Boolean(ctx.users),
+    }),
+  );
+
   // GitHub webhook: authenticated by HMAC signature, not the dashboard token,
   // so it lives outside /api. Disabled unless a secret is configured.
   app.post('/github/webhook', async (c) => {
@@ -168,8 +188,24 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
   // (and when neither is set, the API is open and the caller holds all perms).
   app.use('/api/*', async (c, next) => {
     if (c.req.method === 'OPTIONS') return next();
-    // Accept a bearer token or the login session cookie.
-    const token = bearer(c.req.header('authorization')) ?? sessionToken(c.req.header('cookie'));
+    const cookieHeader = c.req.header('cookie');
+    // Accept a bearer token or the OIDC login session cookie.
+    const token = bearer(c.req.header('authorization')) ?? sessionToken(cookieHeader);
+
+    // A local-user session (self-managed accounts) takes precedence: it resolves
+    // to a stored user whose roles map straight to permissions.
+    if (ctx.users) {
+      const uid = readLocalSession(config.sessionSecret, cookieHeader);
+      const user = uid ? ctx.users.get(uid) : null;
+      if (user && !user.disabled) {
+        c.set('auth', {
+          principal: { subject: user.id, name: user.username, roles: user.roles },
+          perms: permissionsForRoles(user.roles),
+        });
+        return next();
+      }
+    }
+
     if (idEnabled) {
       const principal = verifyToken(token, config, ctx.jwks);
       if (!principal) return c.json({ error: 'unauthorized' }, 401);
@@ -177,6 +213,14 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
         principal,
         perms: permissionsFor(principal, config.operatorRoles, config.adminRoles),
       });
+    } else if (ctx.users) {
+      // Local users are enabled but no session matched: require authentication,
+      // allowing the dashboard token as the service-to-service fallback.
+      if (config.dashboardToken && tokenOk(config.dashboardToken, token)) {
+        c.set('auth', { perms: legacyPermissions() });
+      } else {
+        return c.json({ error: 'unauthorized' }, 401);
+      }
     } else {
       if (config.dashboardToken && !tokenOk(config.dashboardToken, token)) {
         return c.json({ error: 'unauthorized' }, 401);
@@ -203,6 +247,10 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
       // Whether the Transmitter backend is available (so the UI uses the real
       // client instead of the mock preview).
       transmitter: Boolean(ctx.transmitter),
+      // Self-managed accounts: whether local username/password login and
+      // managed agent tokens are available, so the UI shows those surfaces.
+      localUsers: Boolean(ctx.users),
+      agentTokens: Boolean(ctx.agentTokens),
       subject: auth.principal?.subject,
       name: auth.principal?.name,
       roles: auth.principal?.roles ?? [],
@@ -264,6 +312,10 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
   // Transmitter admin API (/api/transmitter/*) and inbound ingest
   // (/transmitter/ingest/:sourceId), when the hub is enabled.
   registerTransmitter(app, ctx);
+
+  // Self-managed accounts: local login + user admin, and managed agent tokens.
+  registerUsers(app, ctx, secureCookies);
+  registerAgentTokens(app, ctx);
 
   return app;
 }
