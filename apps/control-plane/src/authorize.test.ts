@@ -16,6 +16,11 @@ const base: Config = {
   actionsEnabled: false,
   transmitterEnabled: false,
   transmitterDbFile: ':memory:',
+  localUsersEnabled: false,
+  localUsersDbFile: ':memory:',
+  bootstrapAdmin: '',
+  agentTokenStoreEnabled: false,
+  agentTokensDbFile: ':memory:',
   actionTimeoutMs: 20_000,
   auditMax: 500,
   auditFile: '',
@@ -153,6 +158,53 @@ describe('authorizeUpgrade /stream', () => {
       authorizeUpgrade({ pathname: '/stream', origin: base.corsOrigin }, cfg, verify, verifyClient)
         .status,
     ).toBe(401);
+  });
+});
+
+describe('authorizeUpgrade /stream with local users', () => {
+  it('accepts a local session and resolves its permissions from the roles', () => {
+    const cfg = { ...base, localUsersEnabled: true };
+    const admin = authorizeUpgrade(
+      {
+        pathname: '/stream',
+        origin: base.corsOrigin,
+        localPrincipal: { subject: 'u1', name: 'admin', roles: ['admin'] },
+      },
+      cfg,
+      verify,
+    );
+    expect(admin.ok).toBe(true);
+    expect(admin.principal?.name).toBe('admin');
+    expect([...(admin.perms ?? [])].sort()).toEqual(['act', 'reveal', 'view']);
+
+    const viewer = authorizeUpgrade(
+      {
+        pathname: '/stream',
+        origin: base.corsOrigin,
+        localPrincipal: { subject: 'u2', name: 'viewer', roles: ['viewer'] },
+      },
+      cfg,
+      verify,
+    );
+    expect([...(viewer.perms ?? [])]).toEqual(['view']);
+  });
+
+  it('rejects a stream with no local session when local users are enabled', () => {
+    const cfg = { ...base, localUsersEnabled: true };
+    expect(
+      authorizeUpgrade({ pathname: '/stream', origin: base.corsOrigin }, cfg, verify).status,
+    ).toBe(401);
+  });
+
+  it('allows the dashboard token as a service fallback with full permissions', () => {
+    const cfg = { ...base, localUsersEnabled: true, dashboardToken: 'dash-secret' };
+    const ok = authorizeUpgrade(
+      { pathname: '/stream', origin: base.corsOrigin, headerToken: 'dash-secret' },
+      cfg,
+      verify,
+    );
+    expect(ok.ok).toBe(true);
+    expect([...(ok.perms ?? [])].sort()).toEqual(['act', 'reveal', 'view']);
   });
 });
 

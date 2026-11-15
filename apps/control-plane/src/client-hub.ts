@@ -6,7 +6,7 @@ import {
   type ServerMessage,
 } from '@flightdeck/protocol';
 import type { Context } from './context.js';
-import { identityEnabled, permissionsFor, type Principal } from './identity.js';
+import { identityEnabled, permissionsFor, type Permission, type Principal } from './identity.js';
 import { RateLimiter } from './ratelimit.js';
 
 /** Max distinct services one browser socket may subscribe to. */
@@ -24,20 +24,23 @@ export function handleClientConnection(
   ctx: Context,
   actor: string,
   principal?: Principal,
+  resolvedPerms?: Set<Permission>,
 ): void {
   const { store, commands, config, audit, metrics, deploys } = ctx;
   const unsubscribers = new Map<string, () => void>();
   const actionLimiter = new RateLimiter(config.actionRatePerMin, 60_000);
 
-  // When identity is enforced, gate actions on the `act` permission and
-  // attribute the audit entry to the user rather than the socket address.
-  const idEnabled = identityEnabled(config);
-  const perms = principal
-    ? permissionsFor(principal, config.operatorRoles, config.adminRoles)
-    : undefined;
-  const canAct = !idEnabled || (perms?.has('act') ?? false);
+  // When auth is enforced (identity or local users), gate actions on the `act`
+  // permission and attribute the audit entry to the user. `resolvedPerms` is the
+  // authoritative set when the upgrade layer already computed it (local session
+  // or dashboard-token fallback); otherwise derive it from the OIDC role config.
+  const authEnforced = identityEnabled(config) || config.localUsersEnabled;
+  const perms =
+    resolvedPerms ??
+    (principal ? permissionsFor(principal, config.operatorRoles, config.adminRoles) : undefined);
+  const canAct = !authEnforced || (perms?.has('act') ?? false);
   // Editing env writes secrets, so it needs the stronger reveal (admin) permission.
-  const canReveal = !idEnabled || (perms?.has('reveal') ?? false);
+  const canReveal = !authEnforced || (perms?.has('reveal') ?? false);
   const who = principal ? (principal.name ?? principal.subject) : actor;
 
   const send = (msg: ServerMessage): void => {

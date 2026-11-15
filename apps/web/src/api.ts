@@ -28,6 +28,35 @@ export interface Me {
    * client instead of the mock preview. Absent on older control planes.
    */
   transmitter?: boolean;
+  /** True when local username/password accounts are enabled (self-managed auth). */
+  localUsers?: boolean;
+  /** True when the managed agent-token store is enabled. */
+  agentTokens?: boolean;
+}
+
+/** A local user role, mapping to the view/act/reveal permission model. */
+export type Role = 'viewer' | 'operator' | 'admin';
+
+/** A local user account (GET /api/users). Never carries a password. */
+export interface User {
+  id: string;
+  username: string;
+  roles: Role[];
+  disabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastLoginAt: number | null;
+}
+
+/** A managed agent credential (GET /api/agent-tokens). Never carries the secret. */
+export interface AgentToken {
+  id: string;
+  name: string;
+  /** Last 4 chars of the plaintext, for recognition. */
+  hint: string;
+  createdAt: number;
+  lastSeenAt: number | null;
+  revokedAt: number | null;
 }
 
 /** One line returned by the durable log search endpoint, newest-last. */
@@ -231,6 +260,103 @@ export async function fetchAudit(limit?: number): Promise<AuditEntry[]> {
   }
   const data = (await res.json()) as { audit: AuditEntry[] };
   return data.audit;
+}
+
+/** Which sign-in methods the control plane offers (GET /auth/methods, public). */
+export interface AuthMethods {
+  identityEnabled: boolean;
+  loginFlow: boolean;
+  localUsers: boolean;
+}
+
+/** Discover available sign-in methods before a session exists. */
+export async function fetchAuthMethods(): Promise<AuthMethods> {
+  const res = await fetch(`${API_URL}/auth/methods`, { credentials: 'include' });
+  if (!res.ok) throw new ApiError(res.status, `auth methods request failed: ${res.status}`);
+  return (await res.json()) as AuthMethods;
+}
+
+// --- Local users (self-managed accounts) ---
+
+/** Log in with a local username/password; the server sets an HttpOnly session cookie. */
+export async function localLogin(username: string, password: string): Promise<{ user: User }> {
+  return apiFetch<{ user: User }>('/auth/local/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+/** Clear the local session cookie. */
+export async function localLogout(): Promise<void> {
+  await apiFetch<void>('/auth/local/logout', { method: 'POST' });
+}
+
+export async function listUsers(): Promise<User[]> {
+  return (await apiFetch<{ users: User[] }>('/api/users')).users;
+}
+
+export async function createUser(input: {
+  username: string;
+  password: string;
+  roles: Role[];
+}): Promise<User> {
+  return (
+    await apiFetch<{ user: User }>('/api/users', { method: 'POST', body: JSON.stringify(input) })
+  ).user;
+}
+
+export async function updateUser(
+  id: string,
+  patch: { roles?: Role[]; disabled?: boolean },
+): Promise<User> {
+  return (
+    await apiFetch<{ user: User }>(`/api/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  ).user;
+}
+
+export async function setUserPassword(id: string, password: string): Promise<void> {
+  await apiFetch<void>(`/api/users/${encodeURIComponent(id)}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  await apiFetch<void>(`/api/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// --- Managed agent tokens ---
+
+export async function listAgentTokens(): Promise<AgentToken[]> {
+  return (await apiFetch<{ tokens: AgentToken[] }>('/api/agent-tokens')).tokens;
+}
+
+/** Issue a token; the plaintext `secret` is returned exactly once. */
+export async function createAgentToken(
+  name: string,
+): Promise<{ token: AgentToken; secret: string }> {
+  return apiFetch<{ token: AgentToken; secret: string }>('/api/agent-tokens', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function rotateAgentToken(id: string): Promise<{ token: AgentToken; secret: string }> {
+  return apiFetch<{ token: AgentToken; secret: string }>(
+    `/api/agent-tokens/${encodeURIComponent(id)}/rotate`,
+    { method: 'POST' },
+  );
+}
+
+export async function revokeAgentToken(id: string): Promise<void> {
+  await apiFetch<void>(`/api/agent-tokens/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
+}
+
+export async function deleteAgentToken(id: string): Promise<void> {
+  await apiFetch<void>(`/api/agent-tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 /**

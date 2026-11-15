@@ -131,3 +131,32 @@ Appended after each milestone: what shipped, the commits, and open gaps.
   confirm dialog, and the WS send path (gli #23).
 - No real notifications were sent in testing (mock sinks / no matching route /
   invalid creds). SMTP path exercised only for its config-guard, not a real send.
+
+## User & agent-token management (control-plane + web)
+
+- Built the self-managed accounts the design implied but no API backed, as two
+  opt-in, admin-gated, audited backends in `apps/control-plane/src/`:
+  - **Local users** (`users/`): a SQLite store with per-user **scrypt** password
+    hashes (never returned), roles viewer/operator/admin → view/act/reveal, a
+    signed session cookie (`/auth/local/login`), and admin CRUD (`/api/users`)
+    with a last-admin lock-out guard. `FD_LOCAL_USERS` (+ `FD_BOOTSTRAP_ADMIN`,
+    `FD_LOCAL_USERS_DB_FILE`). Enabling it makes `/api` require authentication.
+  - **Agent tokens** (`agent-tokens/`): a SQLite store issuing credentials shown
+    once (SHA-256 hash + 4-char hint), consulted by agent auth alongside the
+    static `FD_AGENT_TOKEN[S]`; issue/rotate/revoke/delete (`/api/agent-tokens`).
+    `FD_AGENT_TOKEN_STORE` (+ `FD_AGENT_TOKENS_DB_FILE`).
+  - Wired through `config`, `context`, `server` (construction + combined agent
+    verifier + bootstrap seed) and `http` (auth middleware resolves a local
+    session first; `/auth/methods` public discovery; CORS extended to `/auth/*`).
+- Web: `api.ts` clients; Settings gains **Users** and **Agents** tabs (admin
+  only) with create/edit/role/disable/reset/delete and issue/rotate/revoke +
+  one-time secret reveal; SignIn offers a local username/password form discovered
+  via `/auth/methods`; Account tab shows the local identity and a Sign out.
+- Tests: store credential/secret-hiding, scrypt verify, session sign/verify,
+  role→permission mapping, and HTTP routes (login, admin gate 403, last-admin
+  409, one-time secret, revoke). Control-plane **161 tests**; full gate green.
+- Verified live: booted with `FD_LOCAL_USERS` + `FD_AGENT_TOKEN_STORE`; confirmed
+  the 401 boundary, login→session, no password-hash/secret leakage, operator 403,
+  last-admin 409, one-time token + revoke, and the audit trail. Screenshots of
+  the sign-in form, Users and Agents tabs, the new-user drawer and the issue-token
+  modal all render correctly (light theme).

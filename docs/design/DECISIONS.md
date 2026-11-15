@@ -49,3 +49,16 @@ autonomous UI build makes choices the brief left open.
   metadata (runtime, OS, agent version, IP, cores) the API does not expose — so
   per the no-fake-data rule it is omitted. Instead the command palette gained
   projects (and keeps services) as real jump targets.
+- **User & agent-token management built as a real backend (opt-in).** The design
+  showed Settings tabs for user roles and agent tokens that the API did not back.
+  Rather than fake forms, two self-managed, admin-gated, audited stores were
+  built, both OFF by default (they widen runtime access): local users
+  (`FD_LOCAL_USERS`; username + scrypt password → the existing session cookie;
+  roles viewer/operator/admin map to view/act/reveal) and managed agent tokens
+  (`FD_AGENT_TOKEN_STORE`; issued once, SHA-256 hashed, consulted alongside the
+  static `FD_AGENT_TOKEN[S]`). Chosen to fit the existing architecture (external
+  IdP for humans, static tokens for agents) as *additional* paths, not a
+  replacement. Enabling local users makes `/api` require auth even with OIDC off;
+  `FD_BOOTSTRAP_ADMIN` seeds the first admin; a last-admin guard prevents
+  lock-out; `/auth/methods` publicly advertises sign-in methods so the login
+  screen renders the right form. How to change: see `docs/security.md`.
