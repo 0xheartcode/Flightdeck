@@ -8,7 +8,7 @@ edition = "2024"
 rust-version = "1.90"
 license = "MIT"
 authors = ["0xheartcode"]
-repository = "https://github.com/0xheartcode/flightdeck-cd"
+repository = "https://github.com/0xheartcode/Flightdeck"
 
 [profile.release]
 # Small, fast single binary for shipping to servers.

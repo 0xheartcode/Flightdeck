@@ -1,4 +1,4 @@
-name: flightdeck-cd
+name: flightdeck
 
 # Demo stack: control plane + web UI + agent + a labelled sample service.
 # Flightdeck's own services are labelled too, so the UI shows it monitoring
@@ -13,7 +13,7 @@ services:
     labels:
       flightdeck.enable: 'true'
       flightdeck.service: 'control-plane'
-      flightdeck.repo: '0xheartcode/flightdeck-cd'
+      flightdeck.repo: '0xheartcode/Flightdeck'
     environment:
       # Required: compose fails fast if unset (no insecure default token).
       FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:?set FD_AGENT_TOKEN in your .env}
@@ -42,7 +42,7 @@ services:
     labels:
       flightdeck.enable: 'true'
       flightdeck.service: 'web'
-      flightdeck.repo: '0xheartcode/flightdeck-cd'
+      flightdeck.repo: '0xheartcode/Flightdeck'
     ports:
       - '8080:80'
     depends_on:
@@ -56,7 +56,7 @@ services:
     labels:
       flightdeck.enable: 'true'
       flightdeck.service: 'agent'
-      flightdeck.repo: '0xheartcode/flightdeck-cd'
+      flightdeck.repo: '0xheartcode/Flightdeck'
     environment:
       FD_CONTROL_PLANE_URL: ws://control-plane:4000/agent
       FD_AGENT_TOKEN: ${FD_AGENT_TOKEN:?set FD_AGENT_TOKEN in your .env}

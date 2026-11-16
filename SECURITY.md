@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report suspected vulnerabilities privately. Open a
-[GitHub security advisory](https://github.com/0xheartcode/flightdeck-cd/security/advisories/new)
+[GitHub security advisory](https://github.com/0xheartcode/Flightdeck/security/advisories/new)
 for this repository, or contact the maintainer directly. Do not open a public
 issue for a security report.
 

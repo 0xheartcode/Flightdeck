@@ -1,6 +1,6 @@
 use clap::Parser;
 
-/// Flightdeck-CD agent: watches labelled containers on this host and streams
+/// Flightdeck agent: watches labelled containers on this host and streams
 /// their logs and status to the control plane.
 #[derive(Debug, Clone, Parser)]
 #[command(name = "flightdeck-agent", version, about)]

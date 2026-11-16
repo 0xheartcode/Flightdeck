@@ -1,4 +1,4 @@
-name: flightdeck-cd
+name: flightdeck
 
 # Production stack: control plane + web UI only.
 #
