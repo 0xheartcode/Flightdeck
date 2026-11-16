@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Flightdeck already exposes a Prometheus /metrics endpoint
+  # (flightdeck_log_lines_total, flightdeck_actions_total, flightdeck_deploys_total,
+  # plus per-service gauges). The watcher just scrapes it — no new code in the
+  # control plane. Adjust the target to where your control plane runs.
+  - job_name: flightdeck-control-plane
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          project: flightdeck
+
+  # The status page dogfoods: it exports flightdeck_watcher_up per monitor.
+  - job_name: flightdeck-watcher-status
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['status:8090']
+        labels:
+          project: flightdeck-watcher

@@ -1,0 +1,66 @@
+# Example alert, logs path. Anatomy of every Grafana alert here:
+#   A (query the data) -> B (reduce to one number) -> C (compare to threshold).
+#
+# Baked-in lessons:
+#  - noDataState: OK. "No matching error logs" is the HEALTHY state, not an
+#    alarm. And KeepLastState — legal in the UI — is REJECTED in a provisioning
+#    file and crash-loops Grafana on boot. Only OK, NoData, Alerting are valid.
+#  - The threshold should come from measuring your own baseline, not a guess.
+#    Tune `params: [50]` to sit above your chronic p90.
+
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: flightdeck-watcher-logs
+    folder: Flightdeck Watcher
+    interval: 1m
+    rules:
+      - uid: fdw-log-error-rate
+        title: High error log rate
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Error log rate is elevated across services'
+          description: 'More than the threshold of error/fatal/panic lines in the last 10m, sustained 5m.'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: flightdeck-loki
+            model:
+              refId: A
+              datasource:
+                type: loki
+                uid: flightdeck-loki
+              # Index lookup by label, then a line filter. 100% of real error
+              # events carry one of these words; matching them de-noises
+              # without dropping a real event.
+              expr: 'sum(count_over_time({env=~".+"} |~ `(?i)(error|fatal|panic)` [10m]))'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [50]

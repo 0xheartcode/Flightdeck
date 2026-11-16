@@ -1,0 +1,51 @@
+# Vector: collect NDJSON from arbitrary emitters and forward to Loki.
+#
+# Three stages: source (receive) -> transform (stamp) -> sink (ship).
+# Keep labels low-cardinality (service, env, project). Everything else stays
+# inside the log line and is searched with LogQL. Labelling a high-cardinality
+# field (user_id, request_id, block_number) creates one index stream per value
+# and is how you OOM Loki or blow up the bill.
+
+sources:
+  app_logs:
+    type: http_server
+    # "0.0.0.0" works for local Docker. On an IPv6-only private network
+    # (e.g. Railway) you MUST bind "[::]:9000" or nothing can reach you.
+    address: '0.0.0.0:9000'
+    framing:
+      method: newline_delimited
+    decoding:
+      codec: json
+
+transforms:
+  stamp:
+    type: remap
+    inputs: [app_logs]
+    # A log with no service still labels cleanly ("unknown") instead of
+    # breaking the sink's labelling step downstream.
+    source: |
+      .received_at = now()
+      if !exists(.service) { .service = "unknown" }
+      if !exists(.env) { .env = "${LOG_ENV:-local}" }
+      if !exists(.project) { .project = "${LOG_PROJECT:-default}" }
+
+sinks:
+  loki:
+    type: loki
+    inputs: [stamp]
+    # Local: straight to Loki (no gateway, token ignored). Cross-project:
+    # point at the gateway URL and set LOKI_TOKEN to that project's token.
+    endpoint: '${LOKI_URL:-http://loki:3100}'
+    encoding:
+      codec: json
+    labels:
+      service: '{{ service }}'
+      env: '{{ env }}'
+      project: '{{ project }}'
+    auth:
+      strategy: bearer
+      token: '${LOKI_TOKEN:-none}'
+    batch:
+      max_events: 200
+      timeout_secs: 2
+    compression: gzip
