@@ -1,4 +1,4 @@
-# Flightdeck-CD 🛫
+# Flightdeck 🛫
 
 A lightweight, self-hosted deployment control plane for containers on your own servers. Railway-style ergonomics, your hardware.
 
@@ -8,7 +8,7 @@ A lightweight, self-hosted deployment control plane for containers on your own s
 
 The open-source field for deployment visibility splits into two camps. Analytics platforms like Apache DevLake aggregate DORA metrics over weeks but never touch runtime logs. GitHub's own deployment view stops at the CI boundary and is GitHub-only. Heavyweight portals like Backstage take months to stand up.
 
-None of them answer the simple, developer-facing question: **"what is running on my servers right now, what is it logging, and did my last deploy actually go out?"** Flightdeck-CD is that single pane of glass, and you host it yourself.
+None of them answer the simple, developer-facing question: **"what is running on my servers right now, what is it logging, and did my last deploy actually go out?"** Flightdeck is that single pane of glass, and you host it yourself.
 
 It talks to the **Docker-compatible API**, so the same agent runs against Docker or a rootless Podman socket unchanged.
 

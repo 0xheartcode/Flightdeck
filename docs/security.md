@@ -171,7 +171,7 @@ Mitigations, strongest first:
   Loki: secure that Loki instance and the network path to it, and set
   `FD_LOKI_TENANT` for a multi-tenant deployment. The search API is gated by the
   same `/api` authentication as everything else.
-- Flightdeck-CD does not persist application secrets. Environment surfacing is
+- Flightdeck does not persist application secrets. Environment surfacing is
   off by default (`FD_COLLECT_ENV`); when on, the agent reports each container's
   env to the control plane over the authenticated agent link. The control plane
   keeps env out of the broadcast registry and the stream entirely, holds it only

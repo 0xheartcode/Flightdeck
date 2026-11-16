@@ -1,4 +1,4 @@
-# Flightdeck-CD agent, run as a static binary on each monitored host.
+# Flightdeck agent, run as a static binary on each monitored host.
 #
 # Install:
 #   sudo useradd --system --create-home --shell /usr/sbin/nologin flightdeck
@@ -11,8 +11,8 @@
 # lingering and point FD_DOCKER_HOST at /run/user/<uid>/podman/podman.sock.
 
 [Unit]
-Description=Flightdeck-CD agent
-Documentation=https://github.com/0xheartcode/flightdeck-cd
+Description=Flightdeck agent
+Documentation=https://github.com/0xheartcode/Flightdeck
 After=network-online.target
 Wants=network-online.target
 

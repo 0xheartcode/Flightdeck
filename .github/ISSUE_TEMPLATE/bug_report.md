@@ -24,7 +24,7 @@ labels: bug
 - Component (agent / control-plane / web):
 - Container runtime (Docker / Podman) and version:
 - OS:
-- Flightdeck-CD version / commit:
+- Flightdeck version / commit:
 
 ## Logs
 

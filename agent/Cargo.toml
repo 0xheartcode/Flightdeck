@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Flightdeck-CD per-server agent: streams container logs and status to the control plane over WebSocket."
+description = "Flightdeck per-server agent: streams container logs and status to the control plane over WebSocket."
 
 [[bin]]
 name = "flightdeck-agent"
