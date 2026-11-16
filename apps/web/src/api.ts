@@ -1,4 +1,14 @@
-import type { DeployRecord, EnvVar, LogLine, ServiceInfo } from '@flightdeck/protocol';
+import type {
+  DeployRecord,
+  EnvVar,
+  LogLine,
+  NetworkAttachment,
+  PortMapping,
+  RouteHint,
+  ServiceInfo,
+} from '@flightdeck/protocol';
+
+export type { NetworkAttachment, PortMapping, RouteHint };
 
 const API_URL = (import.meta.env.VITE_FD_API_URL as string | undefined) ?? 'http://localhost:4000';
 const DASHBOARD_TOKEN = import.meta.env.VITE_FD_DASHBOARD_TOKEN as string | undefined;
@@ -76,6 +86,25 @@ export interface AuditEntry {
   actor: string;
   ok: boolean;
   error?: string;
+}
+
+/** One service's reachability, in the exposure view (GET /api/exposure). */
+export interface ExposedService {
+  id: string;
+  name: string;
+  state: ServiceInfo['state'];
+  ports: PortMapping[];
+  networks: NetworkAttachment[];
+  routes: RouteHint[];
+}
+
+/** One host in the exposure view: its public IP and what it exposes. */
+export interface HostExposure {
+  host: string;
+  agentId?: string;
+  publicIp?: string;
+  lanIps?: string[];
+  services: ExposedService[];
 }
 
 /** Full detail for one service (GET /api/services/:id). */
@@ -178,6 +207,18 @@ export async function fetchServices(): Promise<ServiceInfo[]> {
   }
   const data = (await res.json()) as { services: ServiceInfo[] };
   return data.services;
+}
+
+export async function fetchExposure(): Promise<HostExposure[]> {
+  const res = await fetch(`${API_URL}/api/exposure`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, `exposure request failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { hosts: HostExposure[] };
+  return data.hosts;
 }
 
 export async function fetchMe(): Promise<Me> {

@@ -99,6 +99,66 @@ describe('http api', () => {
     expect(await res.json()).toMatchObject({ ok: true });
   });
 
+  it('serves the exposure view grouped by host with the host public IP', async () => {
+    const ctx = makeContext();
+    ctx.store.upsertService({
+      id: 'api',
+      name: 'api',
+      image: 'img',
+      containerId: 'cid',
+      state: 'running',
+      host: 'server-a',
+      createdAt: 0,
+      ports: [
+        { containerPort: 8080, protocol: 'tcp', hostPort: 8080, hostIp: '0.0.0.0', public: true },
+        {
+          containerPort: 5432,
+          protocol: 'tcp',
+          hostPort: 5432,
+          hostIp: '127.0.0.1',
+          public: false,
+        },
+      ],
+      networks: [{ network: 'bridge', ipAddress: '172.17.0.2' }],
+      routes: [{ domain: 'api.example.com', source: 'traefik-label', tls: true }],
+    });
+    ctx.store.setHostInfo({
+      host: 'server-a',
+      agentId: 'agent-1',
+      publicIp: '203.0.113.7',
+      connectedAt: Date.now(),
+    });
+
+    const app = createHttpApp(ctx, () => 0);
+    const res = await app.request('/api/exposure');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      hosts: Array<{
+        host: string;
+        publicIp?: string;
+        services: Array<{ id: string; ports: Array<{ public: boolean }>; routes: unknown[] }>;
+      }>;
+    };
+    expect(body.hosts).toHaveLength(1);
+    expect(body.hosts[0]?.host).toBe('server-a');
+    expect(body.hosts[0]?.publicIp).toBe('203.0.113.7');
+    expect(body.hosts[0]?.services[0]?.ports.map((p) => p.public)).toEqual([true, false]);
+    expect(body.hosts[0]?.services[0]?.routes).toEqual([
+      { domain: 'api.example.com', source: 'traefik-label', tls: true },
+    ]);
+  });
+
+  it('gates the exposure view behind the same /api auth', async () => {
+    const ctx = makeContext(makeConfig({ dashboardToken: 'dash-secret' }));
+    const app = createHttpApp(ctx, () => 0);
+    const denied = await app.request('/api/exposure');
+    expect(denied.status).toBe(401);
+    const ok = await app.request('/api/exposure', {
+      headers: { authorization: 'Bearer dash-secret' },
+    });
+    expect(ok.status).toBe(200);
+  });
+
   it('requires the dashboard token when configured', async () => {
     const app = createHttpApp(makeContext(makeConfig({ dashboardToken: 'dash-secret' })), () => 0);
 

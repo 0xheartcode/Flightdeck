@@ -106,6 +106,24 @@ Mitigations, strongest first:
   empty). `/auth/methods` publicly reports which sign-in methods are enabled so
   the login screen can render the right form; it carries no secrets.
 
+### Exposure view
+
+- The exposure view (`GET /api/exposure`, Settings has no part in it) reports how
+  each service is reachable: published host ports (flagged public or
+  localhost-only by their bind address), Docker-network IPs, and domains parsed
+  from container labels (Traefik router rules or a native `flightdeck.domain`).
+  It is **read-only** and derived entirely from metadata the agent already reads
+  — there is **no host OS port scan** (only ports a container publishes), **no
+  proxy config-file access** (routing comes from labels), and **no writes**. It
+  is view-level data, gated by the same `/api` authentication as everything else.
+- The host's public IP shown there is observed by the control plane from the
+  agent's own connection, not reported by the agent. Set `FD_TRUSTED_PROXY=true`
+  only when the control plane sits behind a known reverse proxy, so it may read
+  the forwarded address; otherwise the header is ignored to prevent spoofing.
+- Reading a host's own LAN interface addresses is a separate, opt-in collector
+  (`FD_COLLECT_HOST_IPS`, off by default) — the only part of this feature that
+  grants the agent any access beyond the container API.
+
 ## Operator actions
 
 - Actions that change a container (`restart`, and `redeploy` which recreates it

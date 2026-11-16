@@ -42,6 +42,21 @@ export interface ControlPlaneHandle {
   close: () => Promise<void>;
 }
 
+/**
+ * The connecting peer's address, for the exposure view's host public IP. Uses
+ * the real TCP peer by default; honours `X-Forwarded-For` only when the control
+ * plane is explicitly configured to trust a reverse proxy, since the header is
+ * otherwise client-spoofable.
+ */
+function peerAddress(req: IncomingMessage, config: Config): string | undefined {
+  if (config.trustProxyHeaders) {
+    const xff = req.headers['x-forwarded-for'];
+    const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket.remoteAddress ?? undefined;
+}
+
 /** Build and start the control plane. Returns a handle for tests and shutdown. */
 export function startControlPlane(config: Config): ControlPlaneHandle {
   const log = logger.child({ component: 'control-plane' });
@@ -220,7 +235,7 @@ export function startControlPlane(config: Config): ControlPlaneHandle {
         track(ws);
         liveAgents.set(ws, headerToken ?? '');
         ws.on('close', () => liveAgents.delete(ws));
-        handleAgentConnection(ws, ctx, agentName);
+        handleAgentConnection(ws, ctx, agentName, peerAddress(req, config));
       });
       return;
     }

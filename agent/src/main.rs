@@ -145,6 +145,9 @@ async fn run_docker(
                         repo: container.repo.clone(),
                         environment: container.environment.clone(),
                         env: container.env.clone(),
+                        ports: container.ports.clone(),
+                        networks: container.networks.clone(),
+                        routes: container.routes.clone(),
                     }));
                     let _ = tx.try_send(AgentMessage::status(
                         id.clone(),
@@ -247,6 +250,9 @@ async fn run_systemd(
                         repo: None,
                         environment: None,
                         env: None,
+                        ports: None,
+                        networks: None,
+                        routes: None,
                     }));
                     let _ = tx.try_send(AgentMessage::status(id.clone(), unit.state.clone(), None, now_ms()));
 

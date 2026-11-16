@@ -93,9 +93,11 @@ as a routed shell (sidebar + command palette + global status banners) over these
 screens:
 
 - **Overview** — every tracked service with status, host and repo.
-- **Service detail** — live logs, CPU/memory, status, and gated restart /
-  redeploy / environment editing.
-- **Hosts** and **Project** — services grouped by host and by repo/environment.
+- **Service detail** — live logs, CPU/memory, status, gated restart /
+  redeploy / environment editing, and an **Exposure** tab (published ports as
+  public vs localhost, Docker-network IPs, label-derived domains).
+- **Hosts** and **Project** — services grouped by host and by repo/environment;
+  Hosts also shows each host's public IP and what is publicly reachable on it.
 - **Deploys** — the cross-service GitHub Actions timeline (`/api/deploys`).
 - **Activity** — the read-only operator audit trail (`/api/audit`).
 - **Transmitter** — a notifications hub (sources → routes → channels: Telegram,

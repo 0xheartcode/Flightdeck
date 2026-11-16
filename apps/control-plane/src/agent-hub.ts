@@ -7,7 +7,12 @@ import { logger } from './logger.js';
  * Wire a single authenticated agent socket into the store. The upgrade
  * handler has already verified the bearer token before this runs.
  */
-export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: string): void {
+export function handleAgentConnection(
+  ws: WebSocket,
+  ctx: Context,
+  agentName: string,
+  peerAddress?: string,
+): void {
   const { store, commands, metrics, loki, bus } = ctx;
   // Services announced over this connection. Used to remove them when the
   // agent disconnects (a dead host must not linger as a false "running"), and
@@ -35,6 +40,16 @@ export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: st
     switch (msg.type) {
       case 'hello':
         connHost = msg.hostname;
+        // Record the host's exposure facts: the public IP is the connection's
+        // peer address (observed here, never trusted from the agent); LAN IPs
+        // are present only when the opt-in collector is enabled on the agent.
+        store.setHostInfo({
+          host: msg.hostname,
+          agentId: msg.agentId,
+          publicIp: peerAddress,
+          lanIps: msg.lanIps,
+          connectedAt: Date.now(),
+        });
         log.info({ agentId: msg.agentId, host: msg.hostname }, 'agent connected');
         break;
       case 'service': {
@@ -97,5 +112,8 @@ export function handleAgentConnection(ws: WebSocket, ctx: Context, agentName: st
       commands.unregisterService(id, sendCommand);
     }
     owned.clear();
+    if (connHost !== undefined) {
+      store.removeHostInfo(connHost);
+    }
   });
 }

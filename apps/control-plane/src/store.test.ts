@@ -26,6 +26,23 @@ describe('Store', () => {
     expect(store.listServices().map((s) => s.id)).toEqual(['a', 'b']);
   });
 
+  it('records, returns and forgets per-host exposure info', () => {
+    const store = new Store(10);
+    expect(store.getHostInfo('server-a')).toBeUndefined();
+    store.setHostInfo({ host: 'server-a', agentId: 'a1', publicIp: '203.0.113.7', connectedAt: 1 });
+    expect(store.getHostInfo('server-a')?.publicIp).toBe('203.0.113.7');
+    // A reconnect replaces the record (e.g. a new public IP).
+    store.setHostInfo({
+      host: 'server-a',
+      agentId: 'a1',
+      publicIp: '198.51.100.9',
+      connectedAt: 2,
+    });
+    expect(store.getHostInfo('server-a')?.publicIp).toBe('198.51.100.9');
+    store.removeHostInfo('server-a');
+    expect(store.getHostInfo('server-a')).toBeUndefined();
+  });
+
   it('bounds the log ring buffer to bufferSize', () => {
     const store = new Store(3);
     store.upsertService(service('api'));

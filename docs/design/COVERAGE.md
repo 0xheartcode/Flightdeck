@@ -26,6 +26,7 @@ Legend for **Backend**:
 | `GET /api/services/:id/logs/search?q&from&to&limit` | `{lines: SearchLine[]}` | `404` when Loki is not configured. `from`/`to` default to last hour; `limit` ≤ 5000. |
 | `GET /api/deploys?repo&limit` | `{deploys: DeployRecord[]}` | `DeployRecord{id,repo,environment?,sha,branch?,status,runUrl?,actor?,startedAt,updatedAt}`. Filter is by **repo**, not service. |
 | `GET /api/audit?limit` | `{audit: AuditEntry[]}` | `AuditEntry{ts, action, serviceId, actor, ok, error?}`, newest-first. Only **actions** are logged (restart/redeploy/set_env), never reads. |
+| `GET /api/exposure` | `{hosts: HostExposure[]}` | Read-only reachability per host: `publicIp` (from the agent connection) + each service's published `ports` (with `public` = non-loopback), Docker-network IPs, and label-derived `routes`. View-level; no host port scan. See `EXPOSURE-API.md`. |
 | `POST /github/webhook` | — | HMAC; `workflow_run` → deploy correlation. Inbound only. |
 | WS `/stream` | server: `services`,`snapshot`,`log`,`status`,`stats`,`action_result`,`deploy` | client: `subscribe`,`unsubscribe`,`action(restart\|redeploy)`,`set_env`. `stats` is fanned out live, **not retained**. |
 | `GET /auth/login`, `/auth/logout`, `/auth/callback` | — | OIDC browser flow (only when `loginFlow`). |
@@ -42,8 +43,8 @@ retained stats/metrics history. Those drive the gaps below.
 | **Deploys** (global) | yes (`deploys`) | `/api/deploys` | exists | Filter by **project** = `repo`, by **status** = `DeployRecord.status`. "Filter by service" is derived by matching `service.repo` (deploys are repo-keyed, not service-keyed) — note in UI. |
 | **Activity / Audit** | yes (`activity`/`audit`) | `/api/audit` | exists | Columns actor, action, target(=`serviceId`), ok/fail, time. Read-only; no control in it can trigger an action. No `project` field on entries → filter by service id only. |
 | **Transmitter** | yes (`transmitter`, badge = unread signals) | — | **none** | Sources → routes → channels. Build UI on a typed client + **mock adapter** (dev/tests only); contract in `TRANSMITTER-API.md`. Signals/unread badge is a Transmitter concept with no current backend. |
-| **Hosts** | yes (`hosts`, badge = online/total) | `/api/services` (grouped by `host`) | partial | No host-level endpoint. Derive hosts from `ServiceInfo.host`; "online" = has ≥1 running service / live WS. Agent version, OS, uptime shown in design have **no API field** → omit + log. |
-| **Service detail** | yes | `/api/services/:id` + WS | exists | Env masked unless `reveal`. Restart/redeploy gated by `act`; set_env by `reveal`. |
+| **Hosts** | yes (`hosts`, badge = online/total) | `/api/services` (grouped by `host`) + `/api/exposure` | partial | Hosts derived from `ServiceInfo.host`; "online" = has ≥1 running service / live WS. Now also shows the host **public IP** and per-service public reachability (ports/domains) from `/api/exposure`. Agent version, OS, uptime still have **no API field** → omit + log. |
+| **Service detail** | yes | `/api/services/:id` + WS | exists | Env masked unless `reveal`. Restart/redeploy gated by `act`; set_env by `reveal`. An **Exposure** tab shows published ports (public vs localhost), Docker-network IPs and label-derived domains (from the service's `ports`/`networks`/`routes`). |
 | **Project** | yes (`project`) | `/api/services` grouped by `repo`/`environment` | partial | No project entity; a "project" is the set of services sharing `repo`. Project-level metadata in design (description, links) has no API → omit + log. |
 | **Settings** | yes (`settings`: `roles`, `tokens`, `vars`) | `/api/me`, `/api/users`, `/api/agent-tokens` | exists | Identity/permissions read-only from `me`. The design's user + agent-token management is now a **real backend** (opt-in: `FD_LOCAL_USERS`, `FD_AGENT_TOKEN_STORE`): Settings → Users (create/roles/disable/reset/delete) and Agents (issue/rotate/revoke). Service variable editing still has no write endpoint → stays a note. |
 
@@ -103,6 +104,7 @@ retained stats/metrics history. Those drive the gaps below.
 | Activity / Audit | ✅ | real (`/api/audit`, read-only) |
 | Durable log search | ✅ | real (`/logs/search`, gated by `me.logSearch`) |
 | Settings | ✅ | real (`/api/me`; + `/api/users` & `/api/agent-tokens` when enabled) |
+| Exposure (ports/domains/host public IP) | ✅ | real (`/api/exposure`; derived from container metadata + labels, read-only) |
 | Sign in | ✅ | real (`/auth/login` + token fallback) |
 | Transmitter (signals/channels/routes/sources/delivery) | ✅ | **real backend** (control-plane) + mock fallback for preview/tests |
 | Global states (stale, actions-disabled, no-env, permission-denied) | ✅ | real |
