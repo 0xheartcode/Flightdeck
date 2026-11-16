@@ -1,0 +1,24 @@
+{
+  "title": "Flightdeck Status",
+  "groups": [
+    {
+      "name": "Control plane",
+      "monitors": [
+        {
+          "name": "Flightdeck control-plane",
+          "url": "http://host.docker.internal:4000/healthz",
+          "accept": [200]
+        }
+      ]
+    },
+    {
+      "name": "Observability",
+      "monitors": [
+        { "name": "Loki", "url": "http://loki:3100/ready", "accept": [200] },
+        { "name": "Prometheus", "url": "http://prometheus:9090/-/healthy", "accept": [200] },
+        { "name": "Grafana", "url": "http://grafana:3000/api/health", "accept": [200] },
+        { "name": "Loki gateway", "url": "http://loki-gateway:8410/ready", "accept": [200] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+apiVersion: 1
+
+# access: proxy means Grafana's BACKEND queries the datasource (server to
+# server over the private network), so it can reach a private Loki/Prometheus
+# the browser never could.
+#
+# We pin an explicit `uid:` on each datasource. Alert rules and dashboards
+# reference datasources by UID, not name. If you omit uid:, Grafana derives a
+# deterministic one by hashing (name + orgId) — stable across rebuilds, which
+# is fine, but the trap is assuming it's random and templating it. Pinning is
+# simplest and makes the rules below self-evidently correct.
+datasources:
+  - name: Loki
+    uid: flightdeck-loki
+    type: loki
+    access: proxy
+    url: ${LOKI_URL}
+    isDefault: true
+    jsonData:
+      maxLines: 1000
+
+  - name: Prometheus
+    uid: flightdeck-prom
+    type: prometheus
+    access: proxy
+    url: ${PROM_URL}

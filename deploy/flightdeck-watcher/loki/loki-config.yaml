@@ -1,0 +1,57 @@
+# Single-binary Loki, filesystem storage. Correct for an internal tool;
+# you would not run a paying customer's SLO on a single node.
+
+auth_enabled: false # <- why the gateway exists. Loki trusts an unverified
+# X-Scope-OrgID, so it must never face the internet directly.
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1 # single node, no HA
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    # TSDB + schema v13 is the current-generation index. Pinning with a
+    # `from:` date is how Loki migrates index formats over time without
+    # rewriting history: old data keeps its schema, new data uses the new one.
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Retention is TWO settings. This one marks data older than 21d as eligible
+  # for deletion; nothing is actually deleted unless the compactor below has
+  # retention_enabled: true. People set one and forget the other.
+  retention_period: 504h # 21 days
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h # refuse backfilled logs older than 7d
+  allow_structured_metadata: true
+  volume_enabled: true
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true # the second half of retention: actually delete
+  delete_request_store: filesystem
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100

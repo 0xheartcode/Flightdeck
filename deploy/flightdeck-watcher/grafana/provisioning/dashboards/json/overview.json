@@ -1,0 +1,69 @@
+{
+  "uid": "fdw-overview",
+  "title": "Flightdeck Watcher — Overview",
+  "tags": ["flightdeck", "watcher"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "flightdeck-loki" },
+        "query": "label_values(project)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Control plane up",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "flightdeck-prom" },
+      "targets": [{ "refId": "A", "expr": "up{job=\"flightdeck-control-plane\"}" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Log lines / 5m by service",
+      "gridPos": { "h": 5, "w": 18, "x": 6, "y": 0 },
+      "datasource": { "type": "loki", "uid": "flightdeck-loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (count_over_time({project=~\"$project\"} [5m]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "logs",
+      "title": "Live logs",
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 5 },
+      "datasource": { "type": "loki", "uid": "flightdeck-loki" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [{ "refId": "A", "expr": "{project=~\"$project\"}" }]
+    }
+  ]
+}

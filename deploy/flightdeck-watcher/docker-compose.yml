@@ -1,0 +1,120 @@
+name: flightdeck-watcher
+
+# Flightdeck-Watcher: the warm path.
+#
+#   emitters ──► Vector ──► Loki ──► Grafana (logs + alerts-as-code)
+#   scrape jobs ─────────► Prometheus ─┘
+#   active HTTP checks ──► status page (Kuma-style, our own style)
+#
+# Sibling to flightdeck (the live control plane). Flightdeck feeds this
+# stack as a producer: its logs ship to Loki via FD_LOKI_URL, and Prometheus
+# scrapes its /metrics endpoint. Stand it up with:  docker compose up --build
+#
+# Private by default, one narrow public door: only loki-gateway is meant to be
+# internet-reachable, and it checks a per-project bearer token before it will
+# forward a single line to Loki.
+
+services:
+  # ── Collector / forwarder ───────────────────────────────────────────────
+  # Ingests NDJSON from any emitter that is NOT already covered by a Flightdeck
+  # agent (serverless, cross-project services, app-level metrics). Do not point
+  # Vector at container logs a Flightdeck agent already forwards: one path per
+  # source, or you double-ship.
+  vector:
+    image: timberio/vector:0.44.0-debian
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+    environment:
+      LOKI_URL: http://loki:3100
+      LOKI_TOKEN: none
+      LOG_ENV: ${LOG_ENV:-local}
+      LOG_PROJECT: ${LOG_PROJECT:-default}
+    ports:
+      - '${FDW_VECTOR_PORT:-9000}:9000'
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # ── Storage + index ─────────────────────────────────────────────────────
+  # Never exposed publicly. auth_enabled is false; the gateway is its auth.
+  loki:
+    image: grafana/loki:3.2.1
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - '127.0.0.1:${FDW_LOKI_PORT:-3310}:3100' # localhost-only, dev convenience
+    restart: unless-stopped
+
+  # ── The one narrow public door ──────────────────────────────────────────
+  # Bearer-gated reverse proxy in front of the auth-less Loki. One token per
+  # source project, so access is revocable per project and push logs name it.
+  loki-gateway:
+    image: caddy:2.8-alpine
+    volumes:
+      - ./loki-gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      LOKI_TOKEN_PROJECT_A: ${LOKI_TOKEN_PROJECT_A:-changeme-project-a}
+      LOKI_TOKEN_PROJECT_B: ${LOKI_TOKEN_PROJECT_B:-changeme-project-b}
+    ports:
+      - '${FDW_GATEWAY_PORT:-8410}:8410'
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # ── Metrics store ───────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=21d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '127.0.0.1:${FDW_PROM_PORT:-9310}:9090'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway' # reach flightdeck on the host
+    restart: unless-stopped
+
+  # ── Query + alert (provisioning baked into the image: alerts-as-code) ─────
+  grafana:
+    build: ./grafana
+    environment:
+      LOKI_URL: http://loki:3100
+      PROM_URL: http://prometheus:9090
+      GF_SECURITY_ALLOW_EMBEDDING: 'true'
+      # Local convenience only: anonymous admin. In production, set a real
+      # admin password (or front Grafana with an auth proxy) and remove these.
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true'
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '${FDW_GRAFANA_PORT:-3320}:3000'
+    depends_on:
+      - loki
+      - prometheus
+    restart: unless-stopped
+
+  # ── Status page (Kuma-style, flightdeck style) ───────────────────────────
+  # Active HTTP checks of configured monitors; zero-dependency Node server.
+  status:
+    build: ./status
+    environment:
+      FDW_STATUS_INTERVAL_MS: ${FDW_STATUS_INTERVAL_MS:-30000}
+      FDW_STATUS_HISTORY: ${FDW_STATUS_HISTORY:-60}
+    volumes:
+      - ./status/monitors.json:/app/monitors.json:ro
+    ports:
+      - '${FDW_STATUS_PORT:-8090}:8090'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped
+
+volumes:
+  loki-data:
+  prometheus-data:
+  grafana-data:

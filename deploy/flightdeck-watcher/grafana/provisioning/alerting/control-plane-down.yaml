@@ -1,0 +1,60 @@
+# Example alert, metrics path. Fires when Prometheus can no longer scrape the
+# Flightdeck control plane's /metrics (the `up` series drops to 0 or vanishes).
+#
+# Here noDataState: NoData and execErrState: Alerting are the right choices:
+# if the target disappears entirely, "no data" is genuinely unknown/suspicious,
+# not healthy. This is the opposite call from the logs rule, on purpose.
+
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: flightdeck-watcher-metrics
+    folder: Flightdeck Watcher
+    interval: 1m
+    rules:
+      - uid: fdw-control-plane-down
+        title: Flightdeck control-plane down
+        condition: C
+        for: 2m
+        noDataState: NoData
+        execErrState: Alerting
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Flightdeck control-plane /metrics is not scrapeable'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: flightdeck-prom
+            model:
+              refId: A
+              instant: true
+              datasource:
+                type: prometheus
+                uid: flightdeck-prom
+              expr: 'up{job="flightdeck-control-plane"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              reducer: last
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]

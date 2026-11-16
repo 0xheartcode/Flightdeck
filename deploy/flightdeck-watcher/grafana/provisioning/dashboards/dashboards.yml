@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: flightdeck-watcher
+    orgId: 1
+    folder: Flightdeck Watcher
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

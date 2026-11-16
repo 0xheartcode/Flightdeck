@@ -1,0 +1,30 @@
+# The whole security boundary for log ingestion, in ~15 lines.
+#
+# Loki has no auth of its own. This is the auth layer it lacks: a bearer-gated
+# reverse proxy. Anything without a known token gets a flat 401 and never
+# reaches Loki; Loki's real address never leaves the private network.
+
+{
+	admin off # no admin API surface
+	auto_https off # Railway/edge terminates TLS; don't fight it with self-issued certs
+}
+
+:8410 {
+	# Unauthenticated health probe, exempt from the token check so a status
+	# page can confirm the door is up without holding a project token.
+	respond /ready "ok" 200
+
+	# One token per source project, named explicitly. Add a `not header` line
+	# per project: the matcher fires (401) only when the request carries NONE
+	# of the known tokens. Rotate or revoke one project without touching others.
+	@unauth {
+		not path /ready
+		not header Authorization "Bearer {$LOKI_TOKEN_PROJECT_A}"
+		not header Authorization "Bearer {$LOKI_TOKEN_PROJECT_B}"
+	}
+	respond @unauth "unauthorized" 401
+
+	# Valid token -> forward to the private Loki. Reverse proxy, not redirect:
+	# the client only ever talks to the gateway.
+	reverse_proxy loki:3100
+}

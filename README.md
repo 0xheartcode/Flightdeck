@@ -82,6 +82,8 @@ packages/
   protocol/        @flightdeck/protocol - shared wire contract (zod + types)
 agent/             Rust per-server agent (cargo workspace member)
 docker/            Dockerfiles + compose
+deploy/            deployment recipes: agent systemd unit, and the optional
+                   flightdeck-watcher observability stack (Grafana/Loki/Prometheus)
 docs/              architecture and security notes
 ```
 
@@ -145,7 +147,7 @@ configuration, not a different build.
 managed tokens). The **full** tier's extra weight is infrastructure, enabled by
 Compose profiles and their own settings: `docker compose --profile full up`
 starts Postgres (point `FD_DATABASE_URL` at it for HA), and durable log search
-pairs with the [`flightdeck-watcher`](flightdeck-watcher/) Loki/Grafana stack
+pairs with the [`flightdeck-watcher`](deploy/flightdeck-watcher/) Loki/Grafana stack
 (`FD_LOKI_URL`). **Auth is always your call** — a tier never turns it on for you.
 
 ## Deploying
@@ -158,7 +160,7 @@ The agent needs the Docker or Podman socket. On Docker that socket is root-equiv
 
 ## Roadmap
 
-See [docs/architecture.md](docs/architecture.md) for the full picture. Next up: HA / multi-instance (a shared store behind the control plane), multi-runtime agents (systemd, Kubernetes), and durable log search (Loki).
+See [docs/architecture.md](docs/architecture.md) for the full picture. HA / multi-instance fan-out (Postgres) and durable log search (Loki, with the optional [flightdeck-watcher](deploy/flightdeck-watcher/) stack) have shipped. Next up: a Kubernetes agent target, and build-from-source CD (Railway-style git-push deploy).
 
 ## License
 

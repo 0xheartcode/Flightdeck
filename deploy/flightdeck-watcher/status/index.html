@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flightdeck Status</title>
+    <style>
+      :root {
+        --bg: #0b0e14;
+        --panel: #11151f;
+        --panel-2: #161b26;
+        --border: #222a38;
+        --text: #e6edf3;
+        --muted: #8b97a7;
+        --accent: #4aa8ff;
+        --up: #3fb950;
+        --down: #f85149;
+        --degraded: #d29922;
+        --unknown: #6e7681;
+        --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+        --sans: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 48px 16px 80px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      header .mark {
+        font-size: 26px;
+      }
+      header h1 {
+        font-size: 20px;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      header .sub {
+        color: var(--muted);
+        font-size: 13px;
+        font-family: var(--mono);
+      }
+
+      .banner {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin: 24px 0 36px;
+        padding: 18px 20px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+      .banner .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .banner h2 {
+        font-size: 16px;
+        margin: 0;
+        font-weight: 600;
+      }
+      .banner small {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .banner[data-s='operational'] {
+        border-color: color-mix(in srgb, var(--up) 40%, var(--border));
+      }
+      .banner[data-s='operational'] .dot {
+        background: var(--up);
+      }
+      .banner[data-s='degraded'] .dot {
+        background: var(--degraded);
+      }
+      .banner[data-s='outage'] {
+        border-color: color-mix(in srgb, var(--down) 40%, var(--border));
+      }
+      .banner[data-s='outage'] .dot {
+        background: var(--down);
+      }
+      .banner[data-s='unknown'] .dot {
+        background: var(--unknown);
+      }
+
+      .group {
+        margin-bottom: 30px;
+      }
+      .group h3 {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin: 0 0 12px 2px;
+        font-weight: 600;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel);
+        overflow: hidden;
+      }
+      .row {
+        padding: 16px 18px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px 16px;
+        align-items: center;
+      }
+      .row + .row {
+        border-top: 1px solid var(--border);
+      }
+      .name {
+        font-weight: 550;
+        font-size: 15px;
+      }
+      .url {
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        word-break: break-all;
+      }
+      .right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        justify-self: end;
+      }
+      .pct {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--muted);
+        min-width: 56px;
+        text-align: right;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-family: var(--mono);
+      }
+      .pill .d {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .pill[data-s='up'] {
+        color: var(--up);
+        background: color-mix(in srgb, var(--up) 14%, transparent);
+      }
+      .pill[data-s='up'] .d {
+        background: var(--up);
+      }
+      .pill[data-s='down'] {
+        color: var(--down);
+        background: color-mix(in srgb, var(--down) 14%, transparent);
+      }
+      .pill[data-s='down'] .d {
+        background: var(--down);
+      }
+      .pill[data-s='unknown'] {
+        color: var(--unknown);
+        background: color-mix(in srgb, var(--unknown) 14%, transparent);
+      }
+      .pill[data-s='unknown'] .d {
+        background: var(--unknown);
+      }
+
+      /* Kuma-style segmented history bar. */
+      .bars {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 3px;
+        margin-top: 4px;
+        height: 26px;
+        align-items: flex-end;
+      }
+      .bars i {
+        flex: 1;
+        min-width: 2px;
+        max-width: 8px;
+        height: 100%;
+        border-radius: 2px;
+        background: var(--border);
+      }
+      .bars i[data-up='1'] {
+        background: var(--up);
+      }
+      .bars i[data-up='0'] {
+        background: var(--down);
+      }
+
+      footer {
+        margin-top: 40px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        font-family: var(--mono);
+      }
+      footer a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme='dark']) {
+          --bg: #f6f8fa;
+          --panel: #fff;
+          --panel-2: #f0f3f6;
+          --border: #d8dee4;
+          --text: #1f2328;
+          --muted: #656d76;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <span class="mark">🛫</span>
+        <div>
+          <h1>Flightdeck Status</h1>
+          <span class="sub" id="updated">loading…</span>
+        </div>
+      </header>
+
+      <div class="banner" id="banner" data-s="unknown">
+        <span class="dot"></span>
+        <div>
+          <h2 id="banner-title">Checking systems…</h2>
+          <small id="banner-sub"></small>
+        </div>
+      </div>
+
+      <div id="groups"></div>
+
+      <footer>
+        powered by <strong>flightdeck-watcher</strong> · <a href="/api/status">status json</a> ·
+        <a href="/metrics">metrics</a>
+      </footer>
+    </div>
+
+    <script>
+      const BANNER = {
+        operational: ['All systems operational', ''],
+        degraded: ['Partial degradation', 'Some checks have not reported yet'],
+        outage: ['Active outage', 'One or more services are down'],
+        unknown: ['Awaiting first checks', ''],
+      };
+
+      function pill(status) {
+        return `<span class="pill" data-s="${status}"><span class="d"></span>${status}</span>`;
+      }
+
+      function bars(history) {
+        // Pad on the left so the newest check sits on the right.
+        const slots = 40;
+        const h = history.slice(-slots);
+        const pad = slots - h.length;
+        let out = '';
+        for (let i = 0; i < pad; i++) out += '<i></i>';
+        for (const v of h) out += `<i data-up="${v}"></i>`;
+        return `<div class="bars">${out}</div>`;
+      }
+
+      function render(s) {
+        document.getElementById('updated').textContent =
+          'updated ' + new Date(s.updatedAt).toLocaleTimeString();
+
+        const banner = document.getElementById('banner');
+        banner.dataset.s = s.overall;
+        const [t, sub] = BANNER[s.overall] ?? BANNER.unknown;
+        document.getElementById('banner-title').textContent = t;
+        document.getElementById('banner-sub').textContent = sub;
+
+        const root = document.getElementById('groups');
+        root.innerHTML = s.groups
+          .map(
+            (g) => `
+          <section class="group">
+            <h3>${g.name}</h3>
+            <div class="card">
+              ${g.monitors
+                .map(
+                  (m) => `
+                <div class="row">
+                  <div>
+                    <div class="name">${m.name}</div>
+                    <div class="url">${m.url}${m.code ? ' · ' + m.code : ''}${
+                      m.latencyMs != null ? ' · ' + m.latencyMs + 'ms' : ''
+                    }</div>
+                  </div>
+                  <div class="right">
+                    <span class="pct">${m.uptimePct == null ? '—' : m.uptimePct + '%'}</span>
+                    ${pill(m.status)}
+                  </div>
+                  ${bars(m.history)}
+                </div>`,
+                )
+                .join('')}
+            </div>
+          </section>`,
+          )
+          .join('');
+      }
+
+      async function tick() {
+        try {
+          const r = await fetch('/api/status', { cache: 'no-store' });
+          render(await r.json());
+        } catch {
+          /* keep last render; try again next tick */
+        }
+      }
+
+      tick();
+      setInterval(tick, 10_000);
+    </script>
+  </body>
+</html>
