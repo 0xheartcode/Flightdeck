@@ -2,6 +2,44 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { logger } from './logger.js';
 
+/** Deployment tiers: LITE (solo), MEDIUM (team), FULL (fleet). */
+export const PROFILES = ['lite', 'medium', 'full'] as const;
+export type Profile = (typeof PROFILES)[number];
+
+/**
+ * Per-tier defaults for the opt-in feature flags. The tier does NOT touch auth
+ * (always configured explicitly) or infra URLs (OIDC/Postgres/Loki, which are
+ * driven by their own values and by Compose profiles). MEDIUM and FULL share
+ * these flags; FULL's extra weight is infra, not booleans.
+ */
+export const FEATURE_PROFILES: Record<
+  Profile,
+  { actionsEnabled: boolean; transmitterEnabled: boolean; agentTokenStoreEnabled: boolean }
+> = {
+  lite: { actionsEnabled: false, transmitterEnabled: false, agentTokenStoreEnabled: false },
+  medium: { actionsEnabled: true, transmitterEnabled: true, agentTokenStoreEnabled: true },
+  full: { actionsEnabled: true, transmitterEnabled: true, agentTokenStoreEnabled: true },
+};
+
+export function parseProfile(value: string | undefined): Profile | undefined {
+  return (PROFILES as readonly string[]).includes(value ?? '') ? (value as Profile) : undefined;
+}
+
+/**
+ * Resolve a boolean flag: an explicit `FD_*` of `true`/`false` always wins; else
+ * the active profile's default; else the flag's own base default (today's
+ * behavior when no profile is set).
+ */
+export function boolFlag(
+  env: string | undefined,
+  profileDefault: boolean | undefined,
+  base: boolean,
+): boolean {
+  if (env === 'true') return true;
+  if (env === 'false') return false;
+  return profileDefault ?? base;
+}
+
 export interface Config {
   host: string;
   port: number;
@@ -13,6 +51,12 @@ export interface Config {
   agentTokensFile: string;
   /** Optional token the browser API + stream require. Empty = open (dev). */
   dashboardToken: string;
+  /**
+   * Deployment tier. Sets coherent defaults for the feature flags below; any
+   * explicit FD_* still overrides. Optional: when unset, each flag keeps its own
+   * base default (so an existing deployment is unaffected). See FEATURE_PROFILES.
+   */
+  profile?: Profile;
   /** Allowed CORS origin for the REST API. '*' allows any (not recommended). */
   corsOrigin: string;
   /**
@@ -139,7 +183,16 @@ function loadDotenv(): void {
 export function loadConfig(): Config {
   loadDotenv();
 
+  if (process.env.FD_PROFILE && !parseProfile(process.env.FD_PROFILE)) {
+    logger.warn(
+      `FD_PROFILE="${process.env.FD_PROFILE}" is not one of ${PROFILES.join('/')}; ignoring it`,
+    );
+  }
+  const profile = parseProfile(process.env.FD_PROFILE);
+  const pd = profile ? FEATURE_PROFILES[profile] : undefined;
+
   const config: Config = {
+    profile,
     host: process.env.FD_CONTROL_PLANE_HOST ?? '0.0.0.0',
     port: num(process.env.FD_CONTROL_PLANE_PORT, 4000),
     agentToken: process.env.FD_AGENT_TOKEN ?? '',
@@ -151,13 +204,17 @@ export function loadConfig(): Config {
     logBufferSize: num(process.env.FD_LOG_BUFFER_SIZE, 2000),
     maxPayloadBytes: num(process.env.FD_MAX_PAYLOAD_BYTES, 262_144),
     maxServices: num(process.env.FD_MAX_SERVICES, 1000),
-    actionsEnabled: process.env.FD_ENABLE_ACTIONS === 'true',
-    transmitterEnabled: process.env.FD_TRANSMITTER !== 'false',
+    actionsEnabled: boolFlag(process.env.FD_ENABLE_ACTIONS, pd?.actionsEnabled, false),
+    transmitterEnabled: boolFlag(process.env.FD_TRANSMITTER, pd?.transmitterEnabled, true),
     transmitterDbFile: process.env.FD_TRANSMITTER_DB_FILE ?? ':memory:',
     localUsersEnabled: process.env.FD_LOCAL_USERS === 'true',
     localUsersDbFile: process.env.FD_LOCAL_USERS_DB_FILE ?? ':memory:',
     bootstrapAdmin: process.env.FD_BOOTSTRAP_ADMIN ?? '',
-    agentTokenStoreEnabled: process.env.FD_AGENT_TOKEN_STORE === 'true',
+    agentTokenStoreEnabled: boolFlag(
+      process.env.FD_AGENT_TOKEN_STORE,
+      pd?.agentTokenStoreEnabled,
+      false,
+    ),
     agentTokensDbFile: process.env.FD_AGENT_TOKENS_DB_FILE ?? ':memory:',
     actionTimeoutMs: num(process.env.FD_ACTION_TIMEOUT_MS, 20_000),
     auditMax: num(process.env.FD_AUDIT_MAX, 500),

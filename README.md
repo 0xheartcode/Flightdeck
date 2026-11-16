@@ -127,6 +127,27 @@ One command runs the whole quality gate across both stacks, and CI runs exactly 
 just check          # pnpm check (format, lint, typecheck, test, build) + cargo fmt/clippy/test
 ```
 
+## Deployment tiers
+
+Flightdeck is all opt-in feature flags, so instead of hand-setting them you can
+pick a tier with `FD_PROFILE`. It sets sensible **defaults**; any individual
+`FD_*` still overrides it, and leaving `FD_PROFILE` unset keeps each flag's own
+default. The agent is one static binary regardless — a tier is runtime
+configuration, not a different build.
+
+| Tier | What's on | For |
+| --- | --- | --- |
+| **lite** | live logs/stats/status, exposure view, deploy correlation; auth you configure; SQLite | solo / homelab |
+| **medium** | lite **+ actions** (restart/redeploy) **+ env surfacing + Transmitter + managed agent tokens** | small team |
+| **full** | medium **+ OIDC identity + HA (Postgres) + durable log search (Loki) + multi-host** | production fleet |
+
+`FD_PROFILE` governs the control-plane feature flags (actions, Transmitter,
+managed tokens). The **full** tier's extra weight is infrastructure, enabled by
+Compose profiles and their own settings: `docker compose --profile full up`
+starts Postgres (point `FD_DATABASE_URL` at it for HA), and durable log search
+pairs with the [`flightdeck-watcher`](flightdeck-watcher/) Loki/Grafana stack
+(`FD_LOKI_URL`). **Auth is always your call** — a tier never turns it on for you.
+
 ## Deploying
 
 For production, run the control plane and web UI from `docker/compose.prod.yaml` (bound to localhost behind a TLS reverse proxy, with a persistent data volume) and run the agent on each host as a non-root systemd service against a rootless Podman socket. The full walkthrough, including a reverse-proxy example and the authentication options, is in [docs/deploy.md](docs/deploy.md). Liveness and readiness are at `/healthz` and `/readyz`.

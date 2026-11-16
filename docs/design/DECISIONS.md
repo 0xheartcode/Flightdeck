@@ -78,3 +78,17 @@ autonomous UI build makes choices the brief left open.
   Reading the host's own LAN interfaces (`FD_COLLECT_HOST_IPS`) is the one
   genuine access-widening and is **held, off by default, pending approval**; an
   nginx/Caddy config reader is backlog. Full contract: `EXPOSURE-API.md`.
+
+- **Deployment tiers (LITE / MEDIUM / FULL) are packaging, not builds.** A single
+  `FD_PROFILE` sets coherent *defaults* for the control-plane feature flags
+  (actions, Transmitter, managed agent tokens); any explicit `FD_*` still
+  overrides, and an unset profile keeps each flag's own base default so existing
+  deployments are unaffected. There are NO per-tier binaries — the agent is one
+  static binary and the web already adapts via `/api/me`; the tier is runtime
+  config, with zero build-size impact. The tier deliberately does not touch auth
+  (always configured explicitly, never auto-enabled) or infra URLs. FULL's extra
+  weight (Postgres HA, Loki durable logs) is infrastructure, gated by Compose
+  `profiles:` (`--profile full` brings up Postgres) and paired with the
+  `flightdeck-watcher` stack for Loki — not by booleans. Chose three tiers, not
+  five: a no-auth "nano" tier was dropped so an insecure default is never a named,
+  shippable option.
