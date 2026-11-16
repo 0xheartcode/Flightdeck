@@ -1,4 +1,4 @@
-# Flightdeck-CD task runner.
+# Flightdeck task runner.
 # `just` with no args lists recipes.
 
 set shell := ["bash", "-uc"]
@@ -81,7 +81,7 @@ doctor:
     ok() { printf "  \033[32m✔\033[0m %s\n" "$1"; }
     bad() { printf "  \033[31m✘\033[0m %s\n" "$1"; }
     warn() { printf "  \033[33m⚠\033[0m %s\n" "$1"; }
-    echo "Flightdeck-CD doctor"
+    echo "Flightdeck doctor"
     command -v node >/dev/null && ok "node $(node -v)" || bad "node (need >= 24)"
     command -v pnpm >/dev/null && ok "pnpm $(pnpm -v)" || warn "pnpm (run: corepack enable)"
     command -v cargo >/dev/null && ok "cargo $(cargo --version | cut -d' ' -f2)" || bad "cargo (install rustup)"

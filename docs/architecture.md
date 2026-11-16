@@ -1,6 +1,6 @@
 # Architecture
 
-Flightdeck-CD is three parts talking over one versioned protocol.
+Flightdeck is three parts talking over one versioned protocol.
 
 ## Components
 

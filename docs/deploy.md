@@ -1,6 +1,6 @@
 # Production deployment
 
-This is the hardened path for running Flightdeck-CD beyond a trusted network.
+This is the hardened path for running Flightdeck beyond a trusted network.
 For a quick local demo instead, use `just demo` (see the README); that stack
 mounts the root Docker socket and is not meant for production.
 

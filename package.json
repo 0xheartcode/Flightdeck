@@ -1,5 +1,5 @@
 {
-  "name": "flightdeck-cd",
+  "name": "flightdeck",
   "version": "0.1.0",
   "private": true,
   "description": "A lightweight, self-hosted deployment control plane for containers on your own servers. Railway-style UI, your hardware.",

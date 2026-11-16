@@ -4,7 +4,7 @@ Working rules for this repository. Read before making changes.
 
 ## What this is
 
-Flightdeck-CD: a self-hosted deployment control plane for containers. A Rust
+Flightdeck: a self-hosted deployment control plane for containers. A Rust
 agent streams container logs and status to a TypeScript control plane, which a
 React UI renders. See README.md and docs/architecture.md.
 
