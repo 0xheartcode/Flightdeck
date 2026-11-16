@@ -39,6 +39,41 @@ export const EnvVar = z.object({
 });
 export type EnvVar = z.infer<typeof EnvVar>;
 
+/**
+ * A port the container publishes to the host. Derived entirely from Docker's
+ * own metadata (the `list_containers` port map) — this is NOT a host port scan.
+ */
+export const PortMapping = z.object({
+  containerPort: z.number().int(),
+  protocol: z.enum(['tcp', 'udp', 'sctp']),
+  /** Absent when the port is exposed by the image but not published to a host port. */
+  hostPort: z.number().int().optional(),
+  /** Host bind address: `0.0.0.0`/`::` = public, `127.0.0.1`/`::1` = localhost-only. */
+  hostIp: z.string().max(45).optional(),
+  /** Derived: published to a host port AND not bound to loopback. */
+  public: z.boolean(),
+});
+export type PortMapping = z.infer<typeof PortMapping>;
+
+/** The container's address on one Docker network (from inspect; already fetched). */
+export const NetworkAttachment = z.object({
+  network: z.string().max(256),
+  ipAddress: z.string().max(45).optional(),
+});
+export type NetworkAttachment = z.infer<typeof NetworkAttachment>;
+
+/**
+ * A domain the service answers on, learned from container labels only
+ * (Traefik router rules or a native `flightdeck.domain`) — never from config
+ * files. Read-only routing awareness.
+ */
+export const RouteHint = z.object({
+  domain: z.string().max(253),
+  source: z.enum(['traefik-label', 'flightdeck-label']),
+  tls: z.boolean().optional(),
+});
+export type RouteHint = z.infer<typeof RouteHint>;
+
 /** A deployable unit the agent is tracking (one labelled container). */
 export const ServiceInfo = z.object({
   /** Stable id: the `flightdeck.service` label, else the container name. */
@@ -61,6 +96,13 @@ export const ServiceInfo = z.object({
    * never reach the browser except through the reveal-gated detail endpoint.
    */
   env: z.array(EnvVar).max(1000).optional(),
+  /**
+   * Read-only exposure data, derived from metadata the agent already reads.
+   * All optional and bounded, so an older agent that omits them stays valid.
+   */
+  ports: z.array(PortMapping).max(64).optional(),
+  networks: z.array(NetworkAttachment).max(32).optional(),
+  routes: z.array(RouteHint).max(32).optional(),
 });
 export type ServiceInfo = z.infer<typeof ServiceInfo>;
 
@@ -114,6 +156,13 @@ export const AgentHello = z.object({
   type: z.literal('hello'),
   agentId: z.string().max(256),
   hostname: z.string().max(256),
+  /**
+   * Host LAN IP(s), reported only when the agent is explicitly configured to
+   * read its own interfaces (opt-in, off by default). Wire-reserved: the
+   * collector is a separate, approval-gated change. The host's PUBLIC IP is
+   * never on the wire — the control plane observes it from the connection.
+   */
+  lanIps: z.array(z.string().max(45)).max(16).optional(),
 });
 
 export const AgentService = z.object({

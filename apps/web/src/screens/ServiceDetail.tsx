@@ -19,6 +19,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { formatBytes, relativeTime, shortSha } from '@/lib/format';
 import type { Route } from '@/lib/router';
 import { EnvPanel } from './ServiceEnv';
+import { ServiceExposure } from './Exposure';
 import { LogSearchPanel } from './LogSearch';
 import { Page, PageHeader } from './parts';
 
@@ -95,6 +96,7 @@ export function ServiceDetail({ serviceId, onNavigate, logSearchEnabled }: Servi
 
   const tabs = [
     { id: 'logs', label: 'Logs' },
+    { id: 'exposure', label: 'Exposure' },
     { id: 'env', label: 'Environment' },
     { id: 'deploy', label: 'Deploy' },
   ];
@@ -228,6 +230,7 @@ export function ServiceDetail({ serviceId, onNavigate, logSearchEnabled }: Servi
             )}
           </div>
         ) : null}
+        {tab === 'exposure' ? <ServiceExposure service={service} /> : null}
         {tab === 'env' ? (
           <EnvPanel
             serviceId={serviceId}

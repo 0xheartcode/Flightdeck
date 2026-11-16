@@ -14,6 +14,19 @@ type Listener = (msg: ServerMessage) => void;
 type ServicesListener = (services: ServiceInfo[]) => void;
 
 /**
+ * Per-host facts for the read-only exposure view. The public IP is observed by
+ * the control plane from the agent's connection (never self-reported); LAN IPs
+ * arrive on the agent hello only when the opt-in collector is enabled.
+ */
+export interface HostInfo {
+  host: string;
+  agentId?: string;
+  publicIp?: string;
+  lanIps?: string[];
+  connectedAt: number;
+}
+
+/**
  * In-memory state for the control plane: the service registry, a bounded
  * ring buffer of recent logs per service, and the fan-out machinery that
  * pushes live events to subscribed browser sockets.
@@ -30,6 +43,8 @@ export class Store {
   private readonly env = new Map<string, EnvVar[]>();
   private readonly serviceListeners = new Map<string, Set<Listener>>();
   private readonly servicesListeners = new Set<ServicesListener>();
+  // Per-host connection facts for the exposure view (not broadcast on /stream).
+  private readonly hosts = new Map<string, HostInfo>();
 
   constructor(
     private readonly bufferSize: number,
@@ -60,6 +75,20 @@ export class Store {
   /** A service's environment variables with raw values, or undefined if none. */
   getEnv(id: string): EnvVar[] | undefined {
     return this.env.get(id);
+  }
+
+  /** Record (or replace) a host's connection facts for the exposure view. */
+  setHostInfo(info: HostInfo): void {
+    this.hosts.set(info.host, info);
+  }
+
+  getHostInfo(host: string): HostInfo | undefined {
+    return this.hosts.get(host);
+  }
+
+  /** Forget a host when its agent disconnects. */
+  removeHostInfo(host: string): void {
+    this.hosts.delete(host);
   }
 
   upsertService(service: ServiceInfo): void {

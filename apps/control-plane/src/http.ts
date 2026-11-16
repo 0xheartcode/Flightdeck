@@ -260,6 +260,39 @@ export function createHttpApp(ctx: Context, agentCount: () => number): Hono<AppE
 
   app.get('/api/services', (c) => c.json({ services: store.listServices() }));
 
+  // Read-only exposure view: how each service is reachable (published ports,
+  // Docker-network IPs, label-derived domains), grouped by host with the host's
+  // public IP. All view-level data (not secrets), so it rides the normal /api
+  // auth; no reveal needed. Derived from metadata the agent already reports.
+  app.get('/api/exposure', (c) => {
+    const byHost = new Map<string, ReturnType<typeof store.listServices>>();
+    for (const svc of store.listServices()) {
+      const list = byHost.get(svc.host);
+      if (list) list.push(svc);
+      else byHost.set(svc.host, [svc]);
+    }
+    const hosts = [...byHost.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([host, services]) => {
+        const info = store.getHostInfo(host);
+        return {
+          host,
+          agentId: info?.agentId,
+          publicIp: info?.publicIp,
+          lanIps: info?.lanIps,
+          services: services.map((s) => ({
+            id: s.id,
+            name: s.name,
+            state: s.state,
+            ports: s.ports ?? [],
+            networks: s.networks ?? [],
+            routes: s.routes ?? [],
+          })),
+        };
+      });
+    return c.json({ hosts });
+  });
+
   app.get('/api/services/:id', async (c) => {
     const id = c.req.param('id');
     const service = store.getService(id);

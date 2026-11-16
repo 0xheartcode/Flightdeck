@@ -1,11 +1,14 @@
 //! Docker/Podman API access via bollard. Talks to the Docker-compatible
 //! socket, so it works against Docker or a rootless Podman socket unchanged.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bollard::Docker;
-use bollard::config::{ContainerStatsResponse, ContainerSummaryStateEnum};
+use bollard::config::{
+    ContainerStatsResponse, ContainerSummaryNetworkSettings, ContainerSummaryStateEnum,
+    PortSummary, PortSummaryTypeEnum,
+};
 use bollard::container::LogOutput;
 use bollard::query_parameters::{
     ListContainersOptionsBuilder, LogsOptionsBuilder, StatsOptionsBuilder,
@@ -13,7 +16,9 @@ use bollard::query_parameters::{
 use futures_util::StreamExt;
 use tokio::sync::mpsc::Sender;
 
-use crate::protocol::{AgentMessage, EnvVar, LogLine, Stats};
+use crate::protocol::{
+    AgentMessage, EnvVar, LogLine, NetworkAttachment, PortMapping, RouteHint, Stats,
+};
 
 /// Cap a single log line so a container printing a huge line (or binary junk)
 /// cannot blow up a WebSocket frame or the control plane's memory.
@@ -37,6 +42,12 @@ pub struct Discovered {
     /// The container's environment variables, populated only when env
     /// collection is enabled. None means collection was off (not "no vars").
     pub env: Option<Vec<EnvVar>>,
+    /// Published host ports, from Docker's own port summary (not a port scan).
+    pub ports: Option<Vec<PortMapping>>,
+    /// The container's addresses on each Docker network (from the list summary).
+    pub networks: Option<Vec<NetworkAttachment>>,
+    /// Domains from container labels only (Traefik rule / `flightdeck.domain`).
+    pub routes: Option<Vec<RouteHint>>,
 }
 
 pub fn connect(docker_host: Option<&str>) -> anyhow::Result<Docker> {
@@ -152,6 +163,11 @@ pub async fn discover(
             None
         };
 
+        // Exposure data, all derived from metadata already in this summary.
+        let ports = ports_of(summary.ports.as_deref());
+        let networks = networks_of(summary.network_settings.as_ref());
+        let routes = routes_of(labels);
+
         found.push(Discovered {
             container_id,
             service_id,
@@ -163,6 +179,9 @@ pub async fn discover(
             repo,
             environment,
             env,
+            ports,
+            networks,
+            routes,
         });
     }
 
@@ -170,6 +189,136 @@ pub async fn discover(
     env_cache.retain(|id, _| seen.contains(id));
 
     Ok(found)
+}
+
+/// A host bind address that means "loopback only" (not reachable off-box).
+/// `0.0.0.0` / `::` mean all interfaces and are therefore treated as public.
+fn is_loopback_ip(ip: &str) -> bool {
+    ip == "::1" || ip.starts_with("127.")
+}
+
+/// Build published-port mappings from Docker's own port summary. Reads Docker
+/// metadata only — this is deliberately NOT a host OS port scan.
+fn ports_of(ports: Option<&[PortSummary]>) -> Option<Vec<PortMapping>> {
+    let ports = ports?;
+    let mut out: Vec<PortMapping> = ports
+        .iter()
+        .map(|p| {
+            let protocol = match p.typ {
+                Some(PortSummaryTypeEnum::UDP) => "udp",
+                Some(PortSummaryTypeEnum::SCTP) => "sctp",
+                _ => "tcp",
+            }
+            .to_string();
+            let host_ip = p.ip.clone().filter(|s| !s.is_empty());
+            let host_port = p.public_port;
+            // Public = actually published to a host port AND not loopback-bound.
+            let public =
+                host_port.is_some() && !host_ip.as_deref().map(is_loopback_ip).unwrap_or(false);
+            PortMapping {
+                container_port: p.private_port,
+                protocol,
+                host_port,
+                host_ip,
+                public,
+            }
+        })
+        .collect();
+    // Deterministic order so identical state produces identical messages.
+    out.sort_by(|a, b| {
+        (a.container_port, &a.protocol, a.host_port).cmp(&(
+            b.container_port,
+            &b.protocol,
+            b.host_port,
+        ))
+    });
+    (!out.is_empty()).then_some(out)
+}
+
+/// Build per-network IP attachments from the list summary (no inspect call).
+fn networks_of(ns: Option<&ContainerSummaryNetworkSettings>) -> Option<Vec<NetworkAttachment>> {
+    let networks = ns?.networks.as_ref()?;
+    let mut out: Vec<NetworkAttachment> = networks
+        .iter()
+        .map(|(name, ep)| NetworkAttachment {
+            network: name.clone(),
+            ip_address: ep.ip_address.clone().filter(|s| !s.is_empty()),
+        })
+        .collect();
+    out.sort_by(|a, b| a.network.cmp(&b.network));
+    (!out.is_empty()).then_some(out)
+}
+
+/// Extract the host names inside Traefik `Host(\`a\`, \`b\`)` rule fragments.
+/// Pure and unit-tested. Accepts backtick, single- or double-quoted names.
+fn parse_host_rule(rule: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = rule;
+    while let Some(idx) = rest.find("Host(") {
+        rest = &rest[idx + "Host(".len()..];
+        let Some(end) = rest.find(')') else { break };
+        let inner = &rest[..end];
+        for part in inner.split(',') {
+            let domain = part.trim().trim_matches(['`', '\'', '"']).trim();
+            if !domain.is_empty() {
+                out.push(domain.to_string());
+            }
+        }
+        rest = &rest[end + 1..];
+    }
+    out
+}
+
+/// Routing hints from container labels only — Traefik router rules and a native
+/// `flightdeck.domain` — never from proxy config files. Deduplicated and sorted.
+fn routes_of(labels: Option<&HashMap<String, String>>) -> Option<Vec<RouteHint>> {
+    let labels = labels?;
+    let mut by_domain: BTreeMap<String, RouteHint> = BTreeMap::new();
+
+    // Native label: a single domain or a comma-separated list.
+    if let Some(value) = labels.get("flightdeck.domain") {
+        for domain in value.split(',') {
+            let domain = domain.trim();
+            if !domain.is_empty() {
+                by_domain
+                    .entry(domain.to_string())
+                    .or_insert_with(|| RouteHint {
+                        domain: domain.to_string(),
+                        source: "flightdeck-label",
+                        tls: None,
+                    });
+            }
+        }
+    }
+
+    // Traefik router rules: `traefik.http.routers.<name>.rule = Host(`...`)`.
+    for (key, value) in labels {
+        let Some(rest) = key.strip_prefix("traefik.http.routers.") else {
+            continue;
+        };
+        let Some(router) = rest.strip_suffix(".rule") else {
+            continue;
+        };
+        let tls_key = format!("traefik.http.routers.{router}.tls");
+        let tls_prefix = format!("{tls_key}.");
+        let tls = if labels.get(&tls_key).map(String::as_str) == Some("true")
+            || labels.keys().any(|k| k.starts_with(&tls_prefix))
+        {
+            Some(true)
+        } else {
+            None
+        };
+        for domain in parse_host_rule(value) {
+            by_domain.entry(domain.clone()).or_insert(RouteHint {
+                domain,
+                source: "traefik-label",
+                tls,
+            });
+        }
+    }
+
+    let out: Vec<RouteHint> = by_domain.into_values().collect();
+    (!out.is_empty()).then_some(out)
 }
 
 /// Inspect a container for its environment variables. Returns an empty vec on
@@ -533,8 +682,12 @@ pub(crate) fn truncate(line: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{cpu_percent, env_pairs, parse_env, split_image_ref, truncate, unique_service_id};
+    use super::{
+        cpu_percent, env_pairs, is_loopback_ip, parse_env, parse_host_rule, routes_of,
+        split_image_ref, truncate, unique_service_id,
+    };
     use crate::protocol::EnvVar;
+    use std::collections::HashMap;
 
     #[test]
     fn env_pairs_formats_key_equals_value() {
@@ -641,5 +794,74 @@ mod tests {
         let s = "ééééé";
         let out = truncate(s, 5);
         assert!(out.ends_with("[truncated]"));
+    }
+
+    #[test]
+    fn loopback_detection_treats_all_interfaces_as_public() {
+        assert!(is_loopback_ip("127.0.0.1"));
+        assert!(is_loopback_ip("127.1.2.3"));
+        assert!(is_loopback_ip("::1"));
+        // 0.0.0.0 / :: mean "all interfaces" -> reachable -> not loopback.
+        assert!(!is_loopback_ip("0.0.0.0"));
+        assert!(!is_loopback_ip("::"));
+        assert!(!is_loopback_ip("192.168.1.10"));
+    }
+
+    #[test]
+    fn parse_host_rule_extracts_backtick_and_multi_host_domains() {
+        assert_eq!(
+            parse_host_rule("Host(`api.example.com`)"),
+            vec!["api.example.com"]
+        );
+        assert_eq!(
+            parse_host_rule("Host(`a.com`) || Host(`b.com`)"),
+            vec!["a.com", "b.com"]
+        );
+        assert_eq!(
+            parse_host_rule("Host(`a.com`,`b.com`) && PathPrefix(`/x`)"),
+            vec!["a.com", "b.com"]
+        );
+        assert!(parse_host_rule("PathPrefix(`/only`)").is_empty());
+    }
+
+    #[test]
+    fn routes_from_traefik_labels_capture_domain_and_tls() {
+        let mut labels = HashMap::new();
+        labels.insert(
+            "traefik.http.routers.web.rule".to_string(),
+            "Host(`app.example.com`)".to_string(),
+        );
+        labels.insert(
+            "traefik.http.routers.web.tls".to_string(),
+            "true".to_string(),
+        );
+        let routes = routes_of(Some(&labels)).expect("one route");
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].domain, "app.example.com");
+        assert_eq!(routes[0].source, "traefik-label");
+        assert_eq!(routes[0].tls, Some(true));
+    }
+
+    #[test]
+    fn routes_from_native_label_support_comma_lists_and_dedup() {
+        let mut labels = HashMap::new();
+        labels.insert(
+            "flightdeck.domain".to_string(),
+            "one.example.com, two.example.com".to_string(),
+        );
+        // A Traefik rule naming the same domain must not duplicate it.
+        labels.insert(
+            "traefik.http.routers.r.rule".to_string(),
+            "Host(`one.example.com`)".to_string(),
+        );
+        let routes = routes_of(Some(&labels)).expect("routes");
+        let domains: Vec<&str> = routes.iter().map(|r| r.domain.as_str()).collect();
+        assert_eq!(domains, vec!["one.example.com", "two.example.com"]);
+    }
+
+    #[test]
+    fn routes_is_none_without_routing_labels() {
+        let labels = HashMap::new();
+        assert!(routes_of(Some(&labels)).is_none());
     }
 }
