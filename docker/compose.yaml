@@ -21,6 +21,13 @@ services:
       FD_CORS_ORIGIN: ${FD_CORS_ORIGIN:-http://localhost:8080}
       FD_CONTROL_PLANE_PORT: '4000'
       FD_LOG_BUFFER_SIZE: ${FD_LOG_BUFFER_SIZE:-2000}
+      # Deployment tier: lite | medium | full (unset = base defaults). Sets the
+      # feature-flag defaults; any explicit FD_* below still overrides it.
+      FD_PROFILE: ${FD_PROFILE:-}
+      # FULL tier only: point these at the postgres (below, --profile full) and
+      # a Loki endpoint (e.g. the flightdeck-watcher stack). Empty on lite/medium.
+      FD_DATABASE_URL: ${FD_DATABASE_URL:-}
+      FD_LOKI_URL: ${FD_LOKI_URL:-}
     ports:
       - '4000:4000'
     restart: unless-stopped
@@ -80,3 +87,27 @@ services:
       flightdeck.service: 'demo-api'
     command: sh -c 'i=0; while true; do echo "demo tick $$i"; i=$$((i+1)); sleep 1; done'
     restart: unless-stopped
+
+  # FULL tier only: the HA store for cross-instance fan-out. Gated by a Compose
+  # profile, so lite/medium (and plain `just demo`) never start it. Bring it up
+  # with `--profile full` and set FD_DATABASE_URL on the control plane to:
+  #   postgres://flightdeck:flightdeck@postgres:5432/flightdeck
+  # Durable log search (Loki/Grafana) is the flightdeck-watcher stack, not here.
+  postgres:
+    image: postgres:17-alpine
+    profiles: ['full']
+    environment:
+      POSTGRES_USER: flightdeck
+      POSTGRES_PASSWORD: ${FD_POSTGRES_PASSWORD:-flightdeck}
+      POSTGRES_DB: flightdeck
+    volumes:
+      - flightdeck-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U flightdeck']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  flightdeck-pg:
