@@ -62,3 +62,19 @@ autonomous UI build makes choices the brief left open.
   `FD_BOOTSTRAP_ADMIN` seeds the first admin; a last-admin guard prevents
   lock-out; `/auth/methods` publicly advertises sign-in methods so the login
   screen renders the right form. How to change: see `docs/security.md`.
+
+- **Exposure & routing awareness built read-only (Phase 1).** Flightdeck now
+  surfaces how each service is reachable — published host ports (with a
+  public-vs-localhost flag derived from the bind address), Docker-network IPs,
+  and domains parsed from container labels (Traefik router rules and a native
+  `flightdeck.domain`) — grouped per host with the host's public IP. The public
+  IP is observed by the control plane from the agent's connection (never
+  self-reported); `FD_TRUSTED_PROXY=true` lets it come from `X-Forwarded-For`
+  behind a known proxy. Deliberate boundaries, to preserve the agent's
+  allowlist-only security model: all data is derived from metadata the agent
+  already reads (the `list_containers` summary + labels) with **no new Docker
+  calls**, there is **no host OS port scan** (only container-published ports),
+  **no proxy config-file parsing** (routing comes from labels), and **no writes**.
+  Reading the host's own LAN interfaces (`FD_COLLECT_HOST_IPS`) is the one
+  genuine access-widening and is **held, off by default, pending approval**; an
+  nginx/Caddy config reader is backlog. Full contract: `EXPOSURE-API.md`.

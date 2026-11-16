@@ -15,6 +15,13 @@ export interface Config {
   dashboardToken: string;
   /** Allowed CORS origin for the REST API. '*' allows any (not recommended). */
   corsOrigin: string;
+  /**
+   * Trust `X-Forwarded-For` for a connecting peer's address (e.g. the agent's
+   * public IP shown in the exposure view). Off unless the control plane sits
+   * behind a known reverse proxy — otherwise a client could spoof the header.
+   * Optional so it does not disturb existing config literals.
+   */
+  trustProxyHeaders?: boolean;
   /** Max recent log lines kept in memory per service. */
   logBufferSize: number;
   /** Max WebSocket frame size in bytes (both agent and browser sockets). */
@@ -140,6 +147,7 @@ export function loadConfig(): Config {
     agentTokensFile: process.env.FD_AGENT_TOKENS_FILE ?? '',
     dashboardToken: process.env.FD_DASHBOARD_TOKEN ?? '',
     corsOrigin: process.env.FD_CORS_ORIGIN ?? 'http://localhost:5173',
+    trustProxyHeaders: process.env.FD_TRUSTED_PROXY === 'true',
     logBufferSize: num(process.env.FD_LOG_BUFFER_SIZE, 2000),
     maxPayloadBytes: num(process.env.FD_MAX_PAYLOAD_BYTES, 262_144),
     maxServices: num(process.env.FD_MAX_SERVICES, 1000),

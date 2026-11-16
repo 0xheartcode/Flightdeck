@@ -32,6 +32,41 @@ pub struct EnvVar {
     pub value: String,
 }
 
+/// A port the container publishes to the host. Built from Docker's own port
+/// map (list_containers) — this is not a host port scan.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortMapping {
+    pub container_port: u16,
+    pub protocol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_ip: Option<String>,
+    /// Published to a host port AND not bound to loopback.
+    pub public: bool,
+}
+
+/// The container's address on one Docker network (from inspect).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkAttachment {
+    pub network: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip_address: Option<String>,
+}
+
+/// A domain learned from container labels only (Traefik rule or
+/// `flightdeck.domain`) — never from config files.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteHint {
+    pub domain: String,
+    pub source: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceInfo {
@@ -48,6 +83,12 @@ pub struct ServiceInfo {
     pub environment: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env: Option<Vec<EnvVar>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ports: Option<Vec<PortMapping>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub networks: Option<Vec<NetworkAttachment>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routes: Option<Vec<RouteHint>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -132,7 +173,9 @@ pub struct CommandResult {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentMessage {
     Hello(Hello),
-    Service(ServiceMsg),
+    // Boxed: ServiceInfo is by far the largest variant; boxing keeps the enum
+    // small. Serde serialises the Box transparently, so the wire shape is same.
+    Service(Box<ServiceMsg>),
     ServiceGone(ServiceGone),
     Status(StatusMsg),
     Log(LogMsg),
@@ -150,10 +193,10 @@ impl AgentMessage {
     }
 
     pub fn service(service: ServiceInfo) -> Self {
-        AgentMessage::Service(ServiceMsg {
+        AgentMessage::Service(Box::new(ServiceMsg {
             v: PROTOCOL_VERSION,
             service,
-        })
+        }))
     }
 
     pub fn service_gone(service_id: String) -> Self {

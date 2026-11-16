@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AgentHello,
   parseAgentMessage,
   parseClientMessage,
   PROTOCOL_VERSION,
@@ -51,6 +52,67 @@ describe('protocol', () => {
       createdAt: 1700000000000,
     });
     expect(service.state).toBe('running');
+  });
+
+  it('accepts a service info with exposure fields and keeps them optional', () => {
+    const withExposure = ServiceInfo.parse({
+      id: 'api',
+      name: 'api',
+      image: 'ghcr.io/acme/api:latest',
+      containerId: 'abc123',
+      state: 'running',
+      host: 'server-a',
+      createdAt: 1700000000000,
+      ports: [
+        { containerPort: 8080, protocol: 'tcp', hostPort: 8080, hostIp: '0.0.0.0', public: true },
+        {
+          containerPort: 5432,
+          protocol: 'tcp',
+          hostPort: 5432,
+          hostIp: '127.0.0.1',
+          public: false,
+        },
+      ],
+      networks: [{ network: 'bridge', ipAddress: '172.17.0.2' }],
+      routes: [{ domain: 'api.example.com', source: 'traefik-label', tls: true }],
+    });
+    expect(withExposure.ports?.[0]?.public).toBe(true);
+    expect(withExposure.ports?.[1]?.public).toBe(false);
+    expect(withExposure.routes?.[0]?.domain).toBe('api.example.com');
+
+    // An older agent omitting the fields is still valid.
+    const bare = ServiceInfo.parse({
+      id: 'api',
+      name: 'api',
+      image: 'x',
+      containerId: 'abc123',
+      state: 'running',
+      host: 'server-a',
+      createdAt: 1,
+    });
+    expect(bare.ports).toBeUndefined();
+  });
+
+  it('rejects an unknown route source', () => {
+    expect(() =>
+      ServiceInfo.parse({
+        id: 'api',
+        name: 'api',
+        image: 'x',
+        containerId: 'abc123',
+        state: 'running',
+        host: 'server-a',
+        createdAt: 1,
+        routes: [{ domain: 'api.example.com', source: 'nginx-file' }],
+      }),
+    ).toThrow();
+  });
+
+  it('accepts an agent hello with reserved lanIps and without it', () => {
+    const base = { v: PROTOCOL_VERSION, type: 'hello', agentId: 'a1', hostname: 'server-a' };
+    expect(AgentHello.parse(base).lanIps).toBeUndefined();
+    const withIps = AgentHello.parse({ ...base, lanIps: ['10.0.0.4', '192.168.1.20'] });
+    expect(withIps.lanIps).toEqual(['10.0.0.4', '192.168.1.20']);
   });
 
   it('parses a client subscribe message', () => {
